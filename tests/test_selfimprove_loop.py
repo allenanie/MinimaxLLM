@@ -280,3 +280,45 @@ class SelfImproveLoopTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class ReviewReportTest(SelfImproveLoopTest):
+    """The review report is the thing that makes 'does this make sense' answerable."""
+
+    def test_rejected_candidates_are_saved_in_full(self):
+        self.gate_results[1] = (0.3, False)
+        asyncio.run(self.game.play())
+        rejected = self.cfg.run_dir / "tasks" / "t01_1"
+
+        # The whole bundle, not just a note that it failed -- diagnosing a bad
+        # verifier needs the verifier.
+        for rel in ("instruction.md", "tests/test.sh", "solution/solve.sh",
+                    "environment/Dockerfile", "meta.json"):
+            self.assertTrue((rejected / rel).exists(), f"missing {rel}")
+        meta = json.loads((rejected / "meta.json").read_text())
+        self.assertFalse(meta["admitted"])
+        self.assertAlmostEqual(meta["oracle_reward"], 0.3)
+
+    def test_review_shows_both_verdicts_and_the_bundle(self):
+        from hopt.games.review import build_review
+
+        self.gate_results[1] = (0.3, False)
+        asyncio.run(self.game.play())
+        report = build_review(self.cfg.run_dir)
+
+        self.assertIn("TASK t01_0   ADMITTED", report)
+        self.assertIn("TASK t01_1   REJECTED", report)
+        self.assertIn("reference solution scored 0.30", report)
+        # The three files that must agree are all in the report.
+        self.assertIn("--- instruction.md ---", report)
+        self.assertIn("--- tests/test.sh ---", report)
+        self.assertIn("--- solution/solve.sh ---", report)
+
+    def test_review_records_regret_for_admitted_tasks(self):
+        asyncio.run(self.game.play())
+        meta = json.loads(
+            (self.cfg.run_dir / "tasks" / "t01_0" / "meta.json").read_text()
+        )
+        # Completed in the second pass, after the harness was rolled out.
+        self.assertAlmostEqual(meta["harness_reward"], 0.0)
+        self.assertAlmostEqual(meta["regret_oracle"], 1.0)

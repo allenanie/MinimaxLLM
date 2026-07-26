@@ -146,11 +146,70 @@ class RunStore:
         return dest
 
     def save_task(self, task_id: str, artifact: Any, meta: dict) -> Path:
+        """Persist a proposed task bundle, admitted or not.
+
+        Rejected candidates matter *more* than accepted ones for review: an
+        admitted task is by definition coherent (its gold solution passed its own
+        tests), while a rejected one is where you find out the proposer writes
+        verifiers that disagree with its own solutions.
+        """
         dest = self.task_dir(task_id)
         if hasattr(artifact, "copy_to"):
             artifact.copy_to(dest)
         _dump(dest / "meta.json", meta)
         return dest
+
+    def update_task_meta(self, task_id: str, meta: dict) -> Path:
+        """Merge into an already-saved task's metadata without re-copying its files.
+
+        A candidate is saved at gate time but its regret is only known after the
+        harness has been rolled out on it, so the record is completed in two
+        passes.
+        """
+        path = self.task_dir(task_id) / "meta.json"
+        existing: dict = {}
+        if path.exists():
+            try:
+                existing = json.loads(path.read_text())
+            except json.JSONDecodeError:
+                existing = {}
+        existing.update({k: v for k, v in meta.items() if v is not None or k not in existing})
+        return _dump(path, existing)
+
+    #: Small text files from a Harbor trial that explain an outcome. The verifier
+    #: stdout is the one that matters: it says whether a gold solution crashed,
+    #: produced the wrong answer, or was never run.
+    TRIAL_LOG_FILES = (
+        "verifier/test-stdout.txt",
+        "trial.log",
+        "agent/oracle.txt",
+        "agent/runtime.log",
+    )
+
+    def save_trial_logs(self, dest_dir: Path, job_dir: Path, max_bytes: int = 200_000) -> list[Path]:
+        """Copy a trial's explanatory logs out of the Harbor job dir.
+
+        Job dirs live outside the run directory, are excluded from version
+        control, and are deleted and rebuilt whenever a job name is reused -- so
+        anything left only there is gone by the time anyone reviews the run.
+        """
+        saved: list[Path] = []
+        for trial_dir in sorted(p.parent for p in job_dir.glob("*/result.json")):
+            for rel in self.TRIAL_LOG_FILES:
+                src = trial_dir / rel
+                if not src.is_file():
+                    continue
+                out = dest_dir / trial_dir.name / rel
+                out.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    text = src.read_text(errors="replace")
+                except OSError:
+                    continue
+                if len(text) > max_bytes:
+                    text = text[:max_bytes] + f"\n... [{len(text) - max_bytes} bytes elided]"
+                out.write_text(text)
+                saved.append(out)
+        return saved
 
     # --- trajectories & audit ------------------------------------------
     def save_trajectories(self, records: list[TrajectoryRecord]) -> list[Path]:

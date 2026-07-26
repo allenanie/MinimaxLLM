@@ -287,7 +287,7 @@ class SelfImprovingGame(MinimaxGame):
     # --- gating -------------------------------------------------------------
     async def _solvability_gate(
         self, artifact: TaskArtifact, round_idx: int, index: int
-    ) -> tuple[bool, str, float | None]:
+    ) -> tuple[bool, str, float | None, Path | None]:
         """Run the reference solution. A task is admitted only if it scores 1.0.
 
         Deliberately a real rollout rather than a static check: the claim is that
@@ -295,7 +295,7 @@ class SelfImprovingGame(MinimaxGame):
         running it establishes that.
         """
         if not artifact.reward_path_declared():
-            return False, "tests/test.sh never writes to reward.txt or rewards.json", None
+            return False, "tests/test.sh never writes to reward.txt or rewards.json", None, None
 
         staging = self.store.root / "gate" / f"r{round_idx:02d}_c{index}"
         staging.mkdir(parents=True, exist_ok=True)
@@ -303,7 +303,7 @@ class SelfImprovingGame(MinimaxGame):
         artifact.copy_to(candidate)
 
         if not (candidate / "solution" / "solve.sh").exists():
-            return False, "no solution/solve.sh to verify solvability with", None
+            return False, "no solution/solve.sh to verify solvability with", None, None
 
         try:
             batch = await run_oracle_batch(
@@ -312,10 +312,11 @@ class SelfImprovingGame(MinimaxGame):
                 job_name=f"{self.cfg.run_name}__gate__r{round_idx:02d}_c{index}",
             )
         except Exception as exc:  # noqa: BLE001 - a bad Dockerfile is a rejection, not a crash
-            return False, f"container/verifier failed: {type(exc).__name__}: {exc}", None
+            return False, f"container/verifier failed: {type(exc).__name__}: {exc}", None, None
 
+        job_dir = batch.job_dir
         if not batch.outcomes:
-            return False, "no trial ran; the task directory was skipped as invalid", None
+            return False, "no trial ran; the task directory was skipped as invalid", None, job_dir
         best = max(o.reward for o in batch.outcomes)
         if best < 1.0:
             return (
@@ -323,8 +324,9 @@ class SelfImprovingGame(MinimaxGame):
                 f"reference solution scored {best:.2f}, expected 1.0 -- either "
                 "solve.sh does not solve the task or test.sh does not recognise it",
                 best,
+                job_dir,
             )
-        return True, f"reference solution scored {best:.2f}", best
+        return True, f"reference solution scored {best:.2f}", best, job_dir
 
     # --- resolution ----------------------------------------------------------
     async def resolve(
@@ -354,9 +356,10 @@ class SelfImprovingGame(MinimaxGame):
                 instruction=artifact.files().get("instruction.md", "")[:500],
                 rejected_by_optimizer=list(step.rejected),
             )
+            job_dir = None
             try:
                 artifact.validate(self.adversary.spec)
-                ok, reason, oracle_reward = await self._solvability_gate(
+                ok, reason, oracle_reward, job_dir = await self._solvability_gate(
                     artifact, round_idx, index
                 )
             except ArtifactError as exc:
@@ -369,17 +372,26 @@ class SelfImprovingGame(MinimaxGame):
                 {"round": round_idx, "index": index, "admitted": ok, "reason": reason}
             )
             print(f"  candidate {index} {'ADMITTED' if ok else 'REJECTED'}: {reason}")
+
+            # Save EVERY candidate, not just the survivors. A rejected task is the
+            # more informative artifact for review -- it is where you see the
+            # proposer writing a verifier that disagrees with its own solution --
+            # and its bundle would otherwise exist only in a job dir that gets
+            # deleted when the job name is reused.
+            saved = self.store.save_task(candidate.task_id, artifact, candidate.as_dict())
+            if job_dir is not None and job_dir.exists():
+                self.store.save_trial_logs(saved / "gate_logs", job_dir)
+
             if ok:
                 admitted_artifacts.append((candidate, artifact))
         self._pending = []
 
-        # Admit every gated candidate. A verified-solvable task cost a container
-        # build to produce, and discarding the runners-up would throw that away --
-        # the max operator decides what the adversary is *scored* on, not what the
-        # curriculum keeps.
+        # Admit every gated candidate into the running pool. A verified-solvable
+        # task cost a container build to produce, and discarding the runners-up
+        # would throw that away -- the max operator decides what the adversary is
+        # *scored* on, not what the curriculum keeps.
         for candidate, artifact in admitted_artifacts:
             self._admit(artifact, round_idx, candidate.reason, candidate.index)
-            self.store.save_task(candidate.task_id, artifact, candidate.as_dict())
 
         # Roll the current harness on the newly admitted tasks to get r(h; x).
         new_batch = None
@@ -408,6 +420,10 @@ class SelfImprovingGame(MinimaxGame):
                     max(0.0, prior_best - reward) if prior_best is not None else None
                 )
             self._record_pool_rewards(new_batch)
+            # Complete the records written at gate time, now that the harness has
+            # actually been scored on these tasks.
+            for candidate, _ in admitted_artifacts:
+                self.store.update_task_meta(candidate.task_id, candidate.as_dict())
 
         selected = self._select(self.candidates)
         if selected is not None:
