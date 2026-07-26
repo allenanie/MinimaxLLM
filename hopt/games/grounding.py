@@ -13,6 +13,16 @@ come from running a harness that was written to cheat, so the positive is a fact
 about that run, not a judgment. ``llm_auditor`` labels are the weakest link and
 are marked as such so a result can be reported honestly and re-run against
 ``human`` labels later.
+
+**Scope: $t$ does not advance yet.** In the draft, $t$ counts the rounds of
+*auditing* -- new trajectories being adjudicated and folded into the dataset,
+tightening $\\mathcal{H}_t$ over time. That outer loop is future work. What runs
+today is a single minimax game: $\\mathcal{D}_0$ is seeded once before round 1 and
+never grows, so $\\mathcal{H}_t$ is really $\\mathcal{H}_0$ and its only job is to
+stop the adversary asserting an arbitrary detector. The players may still
+self-play for many iterations inside that one game -- the inner loop is
+unaffected. Nothing here audits anything at runtime, and ``llm_auditor`` exists
+as a provenance value for when that loop is built, not because it is used.
 """
 
 from __future__ import annotations

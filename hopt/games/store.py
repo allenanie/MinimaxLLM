@@ -171,17 +171,26 @@ class RunStore:
         return out
 
     # --- LLM calls ------------------------------------------------------
-    def save_prompt(self, round_idx: int, player: str, attempt: int, prompt: str) -> Path:
+    def save_prompt(
+        self, round_idx: int, player: str, attempt: int, prompt: str, tag: str = ""
+    ) -> Path:
+        """``tag`` distinguishes several calls by the same player in one round.
+
+        Game 2's proposer is called once per candidate task, and without a tag
+        every candidate after the first overwrites the previous one's prompt --
+        which is exactly the record you need when a candidate gets rejected.
+        """
+        suffix = f"_{tag}" if tag else ""
         path = (
             self.root
             / "llm"
-            / f"r{round_idx:02d}_{player}_a{attempt}_prompt.txt"
+            / f"r{round_idx:02d}_{player}{suffix}_a{attempt}_prompt.txt"
         )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(prompt)
         return path
 
-    def save_step(self, round_idx: int, player: str, step: Any) -> Path:
+    def save_step(self, round_idx: int, player: str, step: Any, tag: str = "") -> Path:
         """The whole optimizer step, raw response included.
 
         The raw response is the only place a rejected candidate's *files* still
@@ -189,7 +198,10 @@ class RunStore:
         """
         payload = asdict(step) if is_dataclass(step) and not isinstance(step, type) else dict(step)
         payload.pop("artifact", None)  # a Path-bearing object; the dir is saved separately
-        return _dump(self.root / "llm" / f"r{round_idx:02d}_{player}_step.json", payload)
+        suffix = f"_{tag}" if tag else ""
+        return _dump(
+            self.root / "llm" / f"r{round_idx:02d}_{player}{suffix}_step.json", payload
+        )
 
     def save_text(self, relpath: str, text: str) -> Path:
         path = self.root / relpath

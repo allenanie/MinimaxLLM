@@ -225,7 +225,10 @@ class CodeArtifact:
         shutil.copytree(
             self.root, dest, ignore=shutil.ignore_patterns("__pycache__", ".*")
         )
-        return CodeArtifact(dest)
+        # type(self), not CodeArtifact: a subclass carries stricter validation
+        # (TaskArtifact checks Harbor task validity), and hardcoding the base
+        # class here silently downgrades a copy to the weaker checks.
+        return type(self)(dest)
 
     # ------------------------------------------------------------------
     def validate(self, spec: "EntrypointSpec | None" = None) -> None:

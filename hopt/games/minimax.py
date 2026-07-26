@@ -87,6 +87,31 @@ class MinimaxGame(ABC):
     ) -> tuple[MinimizerView, dict]:
         """Turn the adversary's move into a view for the harness, plus record fields."""
 
+    async def adversary_move(self, round_idx: int, view: MaximizerView):
+        """The adversary's turn. One proposal by default.
+
+        A hook rather than an inlined call because the max operator has a
+        different shape in each game. Game 1's ``max_d`` ranges over a *pool that
+        already exists* -- every detector ever proposed is still re-scorable for
+        free, so one new proposal per round still gives a real maximum to take.
+        Game 2's ``max_x`` has no such pool: a task that was never generated
+        cannot be scored, so a genuine maximum needs several candidates generated
+        and gated in the same round. Game 2 overrides this.
+        """
+        step = self.adversary.propose(
+            round_idx=round_idx,
+            current=self.adv_artifact,
+            view=view,
+            horizon_fraction=1.0,
+            dest=self.artifact_root / f"{self.name}__r{round_idx:02d}__adversary",
+        )
+        self.adv_artifact = step.artifact
+        print(
+            f"  adversary proposed ({'changed' if step.changed else 'unchanged'})"
+            + (f"; {len(step.rejected)} rejected" if step.rejected else "")
+        )
+        return step
+
     async def setup(self) -> None:
         """Anything that must happen once before round 1 (e.g. seeding D_0)."""
 
@@ -96,6 +121,10 @@ class MinimaxGame(ABC):
         self.store.save_config(cfg.as_dict())
 
         harness = self._load_harness()
+        # Exposed on the game so a resolve() hook can roll the *current* harness
+        # out on something new -- Game 2 needs this to score freshly admitted
+        # tasks. Kept in sync at the top of every round.
+        self.current_harness = harness
         self.adv_artifact = self.seed_adversary_artifact()
 
         done = self.store.load_rounds()
@@ -123,6 +152,7 @@ class MinimaxGame(ABC):
 
         for round_idx in range(start, cfg.n_rounds + 1):
             print(f"\n[{self.name}] === round {round_idx}/{cfg.n_rounds} ===")
+            self.current_harness = harness
             task_names, dataset_path = await self.task_set(round_idx)
             if not task_names and dataset_path is None:
                 print("  no tasks available for this round; stopping")
@@ -154,22 +184,10 @@ class MinimaxGame(ABC):
                 harness_files=harness.files(),
                 batch=batch,
                 records=records,
-                grounding=self._grounding_text(),
-                archive=self._archive_text(),
+                sections=self._adversary_sections(),
                 pool=self._pool_ids(),
             )
-            adv_step = self.adversary.propose(
-                round_idx=round_idx,
-                current=self.adv_artifact,
-                view=max_view,
-                horizon_fraction=1.0,
-                dest=self.artifact_root / f"{self.name}__r{round_idx:02d}__adversary",
-            )
-            self.adv_artifact = adv_step.artifact
-            print(
-                f"  adversary proposed ({'changed' if adv_step.changed else 'unchanged'})"
-                + (f"; {len(adv_step.rejected)} rejected" if adv_step.rejected else "")
-            )
+            adv_step = await self.adversary_move(round_idx, max_view)
 
             # 3. game-specific resolution
             min_view, extra = await self.resolve(round_idx, batch, records)
@@ -292,12 +310,10 @@ class MinimaxGame(ABC):
             list(self.split.train), self.cfg.batch_size, self.cfg.seed, round_idx
         )
 
-    # Subclasses override these three to feed the adversary's context block.
-    def _grounding_text(self) -> str:
-        return ""
-
-    def _archive_text(self) -> str:
-        return ""
+    # Subclasses override these to feed the adversary's context block.
+    def _adversary_sections(self) -> tuple[tuple[str, str], ...]:
+        """``(heading, body)`` pairs appended to the adversary's prompt."""
+        return ()
 
     def _pool_ids(self) -> tuple[str, ...]:
         return ()

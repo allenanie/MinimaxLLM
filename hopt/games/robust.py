@@ -16,6 +16,13 @@ happens on the val split, penalization on the train batch.** $r_d(h)$ and
 $r_d(h^*_d)$ must be measured on a task set shared across harness versions, or the
 regret compares task difficulty instead of harness quality. The penalty the
 harness then learns from is applied to the batch it actually rolled out.
+
+**Scope.** This is one minimax game with many self-play iterations, not a
+sequence of audited games. $\\mathcal{D}_0$ is seeded once in ``setup`` and never
+re-audited, so the constraint set is fixed for the whole run -- see
+``hopt/games/grounding.py``. Game 2 needs none of this machinery, which is why it
+is the easier one to verify: its ground truth is a script that either scores 1.0
+or does not.
 """
 
 from __future__ import annotations
@@ -324,11 +331,14 @@ class RobustHarnessGame(MinimaxGame):
         }
 
     # --- adversary context ------------------------------------------------
-    def _grounding_text(self) -> str:
-        return self.report.render()
-
-    def _archive_text(self) -> str:
-        return self.archive.render(self._archive_scores)
+    def _adversary_sections(self) -> tuple[tuple[str, str], ...]:
+        return (
+            ("GROUNDING ON THE ADJUDICATED DATASET", self.report.render()),
+            (
+                "HOW YOUR POOL SCORES PAST HARNESSES",
+                self.archive.render(self._archive_scores),
+            ),
+        )
 
     def _pool_ids(self) -> tuple[str, ...]:
         return tuple(d.id for d in self.pool)

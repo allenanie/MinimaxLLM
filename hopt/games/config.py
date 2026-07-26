@@ -39,6 +39,22 @@ class GameConfig:
     #: round index -- regret would inflate from pool growth rather than from the
     #: harness getting worse. None means the whole archive.
     reference_k: int | None = 5
+    # --- Game 2 -------------------------------------------------------------
+    #: Candidate tasks proposed per round. This *is* the max operator: Game 1's
+    #: max_d ranges over a pool of detectors that stay re-scorable for free, but
+    #: a task that was never generated cannot be scored, so with n_candidates=1
+    #: there is nothing to maximize over and the round is a plain curriculum step.
+    n_candidates: int = 2
+    #: Real benchmark tasks shown to the proposer as worked examples of the
+    #: bundle it must emit. Kept small: they are large, and their job is to fix
+    #: the format and difficulty register, not to be a corpus.
+    n_grounding_tasks: int = 2
+    #: Reference point for Game 2 regret.
+    #:   oracle    -- 1.0, proven by the solvability gate. Ground truth given the
+    #:                draft's expressiveness assumption (main.tex:126).
+    #:   empirical -- best reward any harness version has scored on that task.
+    #: Both are always recorded; this picks which one selection uses.
+    reference: str = "oracle"
     #: Detector representation (Game 1 only).
     detector_kind: str = "code"
     #: How much of the detector's output reaches the harness optimizer.
@@ -85,6 +101,14 @@ class GameConfig:
             raise ValueError("epsilon must be >= 0")
         if self.reference_k is not None and self.reference_k < 1:
             raise ValueError("reference_k must be >= 1 or None (whole archive)")
+        if self.reference not in ("oracle", "empirical"):
+            raise ValueError(
+                f"unknown reference {self.reference!r}; choose from ('oracle', 'empirical')"
+            )
+        if self.n_candidates < 1:
+            raise ValueError("n_candidates must be >= 1")
+        if self.n_grounding_tasks < 0:
+            raise ValueError("n_grounding_tasks must be >= 0")
 
     @property
     def barrier_depth(self) -> BarrierDepth:

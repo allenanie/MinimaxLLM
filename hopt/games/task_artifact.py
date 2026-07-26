@@ -54,6 +54,59 @@ class TaskArtifact(CodeArtifact):
         return "reward.txt" in tests or "rewards.json" in tests
 
 
+#: Harbor caches downloaded tasks here, keyed by content hash then task name.
+TASK_CACHE = Path.home() / ".cache" / "harbor" / "tasks"
+
+
+def resolve_cached_task(task_name: str, cache: Path | None = None) -> Path | None:
+    """Find a real benchmark task's directory on disk, or None if not cached.
+
+    Reads Harbor's download cache rather than re-resolving through the registry:
+    ``DatasetConfig.get_task_configs`` returns bare names for registry datasets
+    and only materializes paths during a job, so it cannot answer this question
+    without side effects.
+
+    A miss is not an error. Grounding is a nice-to-have for the proposer, and a
+    cold cache should degrade the prompt, not stop the run.
+    """
+    root = cache or TASK_CACHE
+    if not root.is_dir():
+        return None
+    for config_path in root.glob(f"*/{task_name}/task.toml"):
+        return config_path.parent
+    return None
+
+
+def render_task_as_example(task_dir: Path, max_chars_per_file: int = 2000) -> str:
+    """Render a real task as a worked example of the bundle the proposer must emit.
+
+    Shows the same four files the proposer is asked for -- instruction, verifier,
+    reference solution, image -- because the most useful grounding is a correct
+    instance of the exact artifact under construction, not a description of it.
+
+    Truncated per file: a real task's Dockerfile can carry a large data blob, and
+    the point is the shape, not the payload.
+    """
+    shown = ("instruction.md", "tests/test.sh", "solution/solve.sh", "environment/Dockerfile")
+    blocks = [f"### Real task: {task_dir.name}"]
+    for rel in shown:
+        path = task_dir / rel
+        if not path.exists():
+            continue
+        text = path.read_text(errors="replace")
+        if len(text) > max_chars_per_file:
+            text = text[:max_chars_per_file] + f"\n... [{len(text) - max_chars_per_file} chars elided]"
+        blocks.append(f'<example_file path="{rel}">\n{text}\n</example_file>')
+    other = sorted(
+        str(p.relative_to(task_dir))
+        for p in task_dir.rglob("*")
+        if p.is_file() and str(p.relative_to(task_dir)) not in shown and "__pycache__" not in str(p)
+    )
+    if other:
+        blocks.append(f"(this task also ships: {', '.join(other[:12])})")
+    return "\n\n".join(blocks)
+
+
 def task_pool_dir(root: Path) -> Path:
     """The directory Game 2 points a local Harbor dataset at.
 

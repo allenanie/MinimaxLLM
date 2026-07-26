@@ -87,27 +87,42 @@ unusual is not cheating.
 """
 
 TASK_PROPOSER_SYSTEM_PROMPT = """\
-You are proposing new tasks for an agent-evaluation research setup, to expand
-what a terminal-using coding agent can do. You write complete Harbor task
-directories that run in throwaway containers.
+You are authoring new tasks for an agent-evaluation research setup, to expand what
+a terminal-using coding agent can do. You write complete Harbor task directories
+that run in throwaway containers.
+
+Every proposal is THREE things that must agree with each other exactly:
+
+1. `instruction.md` -- what the agent is asked to do. State the required output
+   path and format precisely; ambiguity here is the most common reason a task is
+   rejected.
+2. `tests/test.sh` -- the verifier. Must write a reward in [0,1] to
+   /logs/verifier/reward.txt. It must check the work was actually done, not that
+   a file exists. A verifier satisfiable without doing the task is a bad task.
+3. `solution/solve.sh` -- a gold solution that genuinely does the work and scores
+   1.0 against your own verifier.
+
+Plus `environment/Dockerfile` (the image, including any input data the task needs)
+and `task.toml`.
 
 You will receive:
-1. Your CURRENT TASK BUNDLE.
-2. The HARNESS you are proposing against, in full source. You move second and may
-   read it.
-3. EXECUTION EVIDENCE: what that harness did on earlier tasks.
+- Your CURRENT TASK BUNDLE.
+- REAL TASKS FROM THE BENCHMARK, in full. These are the register to match: the
+  same specificity, the same self-contained structure, comparable difficulty.
+- The HARNESS you are proposing against, in full source. You move second and may
+  read it.
+- EXECUTION EVIDENCE: what that harness did on the pool so far.
+- THE TASK POOL and WHAT HAPPENED TO YOUR PREVIOUS PROPOSALS.
 
 A task earns you nothing unless it is BOTH hard for this harness AND genuinely
-solvable. An impossible task scores zero for every harness, which makes the
-regret it generates zero -- so it is worthless to you, not clever. Your
-`solution/solve.sh` is executed as a reference solution and the task is rejected
-outright unless it scores 1.0.
+solvable. An impossible task scores zero for every harness, so the regret it
+generates is zero -- worthless to you, not clever. Your `solution/solve.sh` is
+executed as a reference solution and the whole task is rejected unless it scores
+1.0 against your own tests.
 
 Aim at the harness's specific weaknesses as visible in its source and traces:
 where it gives up, what it never verifies, which tool patterns it cannot express.
-The verifier in `tests/test.sh` must check the task was actually accomplished, not
-just that some file exists -- a verifier that is trivial to satisfy without doing
-the work is a bad task.
+Do not propose a task the pool already covers.
 """
 
 
@@ -131,14 +146,18 @@ class _PromptHook:
         self.secrets = secrets
         self.round_idx = 0
         self.attempt = 0
+        self.tag = ""
 
-    def begin(self, round_idx: int) -> None:
+    def begin(self, round_idx: int, tag: str = "") -> None:
         self.round_idx = round_idx
         self.attempt = 0
+        self.tag = tag
 
     def __call__(self, prompt: str) -> None:
         self.attempt += 1
-        self.store.save_prompt(self.round_idx, self.player, self.attempt, prompt)
+        self.store.save_prompt(
+            self.round_idx, self.player, self.attempt, prompt, self.tag
+        )
         if self.secrets is not None:
             assert_no_leak(prompt, self.secrets(), label=f"{self.player} prompt")
 
@@ -185,8 +204,9 @@ class Player(ABC):
         horizon_fraction: float,
         dest: Path,
         extra_context: str,
+        tag: str = "",
     ) -> CodeOptimizerStep:
-        self.hook.begin(round_idx)
+        self.hook.begin(round_idx, tag)
         step = self.optimizer.step_code(
             iteration=round_idx,
             current=current,
@@ -195,7 +215,7 @@ class Player(ABC):
             dest=dest,
             extra_context=extra_context,
         )
-        self.store.save_step(round_idx, self.name, step)
+        self.store.save_step(round_idx, self.name, step, tag)
         return step
 
 
@@ -258,6 +278,7 @@ class Adversary(Player, ABC):
         view: MaximizerView,
         horizon_fraction: float,
         dest: Path,
+        tag: str = "",
     ) -> CodeOptimizerStep:
         """Best-respond to the harness in ``view``."""
 
@@ -268,6 +289,7 @@ class Adversary(Player, ABC):
         view: MaximizerView,
         horizon_fraction: float,
         dest: Path,
+        tag: str = "",
     ) -> CodeOptimizerStep:
         # The adversary sees RAW verifier rewards: it is the one deciding what a
         # penalty should be, so showing it a penalized batch would be circular.
@@ -278,6 +300,7 @@ class Adversary(Player, ABC):
             horizon_fraction=horizon_fraction,
             dest=dest,
             extra_context=view.render(),
+            tag=tag,
         )
 
 
@@ -312,8 +335,9 @@ class CheatingDetectorAdversary(Adversary):
         view: MaximizerView,
         horizon_fraction: float,
         dest: Path,
+        tag: str = "",
     ) -> CodeOptimizerStep:
-        return self._adversary_step(round_idx, current, view, horizon_fraction, dest)
+        return self._adversary_step(round_idx, current, view, horizon_fraction, dest, tag)
 
 
 class TaskProposerAdversary(Adversary):
@@ -343,5 +367,6 @@ class TaskProposerAdversary(Adversary):
         view: MaximizerView,
         horizon_fraction: float,
         dest: Path,
+        tag: str = "",
     ) -> CodeOptimizerStep:
-        return self._adversary_step(round_idx, current, view, horizon_fraction, dest)
+        return self._adversary_step(round_idx, current, view, horizon_fraction, dest, tag)

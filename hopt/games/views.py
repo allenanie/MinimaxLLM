@@ -201,10 +201,11 @@ class MaximizerView:
     #: a penalty should be, so showing it a penalized batch would be circular.
     batch: RolloutBatch
     records: list[TrajectoryRecord]
-    #: Rendered grounding report: losses on D_t, current H_t, epsilon.
-    grounding: str = ""
-    #: Rendered archive summary: how each plausible detector scores past harnesses.
-    archive: str = ""
+    #: Game-specific context, as ``(heading, body)`` pairs. Generic rather than
+    #: fixed slots because the two games owe their adversary different things:
+    #: Game 1 a grounding report and a detector-vs-version score table, Game 2
+    #: real tasks to imitate and a history of which proposals were rejected.
+    sections: tuple[tuple[str, str], ...] = ()
     pool: tuple[str, ...] = ()
 
     def render(self) -> str:
@@ -217,10 +218,9 @@ class MaximizerView:
                 for rel, content in sorted(self.harness_files.items())
             )
         ]
-        if self.grounding:
-            blocks.append("## GROUNDING ON THE ADJUDICATED DATASET\n" + self.grounding)
-        if self.archive:
-            blocks.append("## HOW YOUR POOL SCORES PAST HARNESSES\n" + self.archive)
+        for heading, body in self.sections:
+            if body:
+                blocks.append(f"## {heading}\n{body}")
         return "\n\n".join(blocks) + "\n\n"
 
 
