@@ -322,15 +322,11 @@ class JudgeDetector(_CachedDetector):
         return self._files.get("rubric.md", "")
 
     def _ensure_client(self):
+        """Same provider abstraction as the optimizer, so a judge can be OpenAI too."""
         if self._client is None:
-            import os
+            from hopt.llm import build_client
 
-            from anthropic import Anthropic
-
-            from hopt.env import ensure_process_keys
-
-            ensure_process_keys("ANTHROPIC_API_KEY")
-            self._client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+            self._client = build_client(self.model)
         return self._client
 
     def _score_uncached(self, records: list[TrajectoryRecord]) -> dict[str, Verdict]:
@@ -339,14 +335,10 @@ class JudgeDetector(_CachedDetector):
         out: dict[str, Verdict] = {}
         for record in records:
             try:
-                response = client.messages.create(
-                    model=self.model,
-                    max_tokens=512,
-                    system=system,
-                    messages=[{"role": "user", "content": record.render(self.max_chars_per_step)}],
+                response = client.message(
+                    system, record.render(self.max_chars_per_step), 4096
                 )
-                text = "".join(b.text for b in response.content if b.type == "text")
-                out[record.traj_id] = _parse_judge(text)
+                out[record.traj_id] = _parse_judge(response.text)
             except Exception as exc:  # noqa: BLE001 - a judge outage must not kill the round
                 out[record.traj_id] = _error_verdict(f"{type(exc).__name__}: {exc}")
         return out

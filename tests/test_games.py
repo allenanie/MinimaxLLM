@@ -563,3 +563,54 @@ class TestTaskArtifact(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestProviderRouting(unittest.TestCase):
+    """Model strings must route to the right provider and key. No network."""
+
+    def test_bare_name_is_anthropic(self):
+        from hopt.llm import split_model
+
+        self.assertEqual(split_model("claude-sonnet-5"), ("anthropic", "claude-sonnet-5"))
+
+    def test_prefixes_are_honoured(self):
+        from hopt.llm import split_model
+
+        self.assertEqual(split_model("openai/gpt-5.6-sol"), ("openai", "gpt-5.6-sol"))
+        self.assertEqual(
+            split_model("anthropic/claude-opus-5"), ("anthropic", "claude-opus-5")
+        )
+
+    def test_unknown_provider_is_rejected_with_a_usable_message(self):
+        from hopt.llm import build_client
+
+        with self.assertRaises(ValueError) as ctx:
+            build_client("mistral/large")
+        self.assertIn("openai", str(ctx.exception))
+
+    def test_each_provider_maps_to_its_own_key(self):
+        from hopt.env import key_var_for_model
+
+        self.assertEqual(key_var_for_model("openai/gpt-5.6-luna"), "OPENAI_API_KEY")
+        self.assertEqual(key_var_for_model("claude-haiku-4-5"), "ANTHROPIC_API_KEY")
+
+    def test_openai_reports_no_token_count_so_the_fitter_estimates(self):
+        # None is a supported answer, not a failure -- _fit_prompt has a
+        # chars-per-token fallback that this path relies on.
+        from hopt.llm import OpenAIClient
+
+        client = OpenAIClient.__new__(OpenAIClient)
+        self.assertIsNone(client.count_tokens("sys", "user"))
+
+    def test_sandbox_runtime_splits_provider_the_same_way(self):
+        import importlib.util
+        from pathlib import Path
+
+        path = Path(__file__).resolve().parent.parent / "hopt" / "sandbox_runtime" / "run_agent.py"
+        spec = importlib.util.spec_from_file_location("rt_probe", path)
+        rt = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(rt)
+        self.assertIn("openai", rt.MAX_OUTPUT_TOKENS)
+        # The OpenAI budget must exceed Anthropic's: it also covers reasoning
+        # tokens, and too small a cap returns an empty turn.
+        self.assertGreater(rt.MAX_OUTPUT_TOKENS["openai"], rt.MAX_OUTPUT_TOKENS["anthropic"])

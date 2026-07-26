@@ -33,6 +33,13 @@ from pathlib import Path
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
+OPENAI_URL = "https://api.openai.com/v1/chat/completions"
+
+# Output budget for one agent turn. Generous for OpenAI because the budget there
+# covers reasoning tokens as well as the reply: at 4096 a reasoning model can
+# spend the entire allowance thinking and return an empty string, which the agent
+# reads as "no command" and burns a step on.
+MAX_OUTPUT_TOKENS = {"anthropic": 4096, "openai": 16000}
 
 
 class BudgetExceeded(RuntimeError):
@@ -65,7 +72,13 @@ class Runtime:
         max_output_chars: int,
         recorder: Recorder,
     ) -> None:
-        self.model = model.split("/", 1)[-1]  # strip any provider prefix
+        # "openai/gpt-x" -> provider "openai", model "gpt-x". A bare name is
+        # Anthropic, so existing runs are unchanged.
+        provider, _, name = model.partition("/")
+        if not name:
+            provider, name = "anthropic", provider
+        self.provider = provider.lower()
+        self.model = name
         self.step_limit = step_limit
         self.wall_time_limit_sec = wall_time_limit_sec
         self.exec_timeout_sec = exec_timeout_sec
@@ -74,9 +87,10 @@ class Runtime:
         self.n_calls = 0
         self.usage = {"input_tokens": 0, "output_tokens": 0}
         self._start = time.time()
-        self._api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        key_var = "OPENAI_API_KEY" if self.provider == "openai" else "ANTHROPIC_API_KEY"
+        self._api_key = os.environ.get(key_var, "")
         if not self._api_key:
-            raise RuntimeError("ANTHROPIC_API_KEY not set inside the sandbox")
+            raise RuntimeError(f"{key_var} not set inside the sandbox")
 
     # -- budget --------------------------------------------------------
     def _check_budget(self) -> None:
@@ -92,24 +106,43 @@ class Runtime:
         self._check_budget()
         self.n_calls += 1
 
-        payload: dict = {
-            "model": self.model,
-            "max_tokens": 4096,
-            "messages": [
-                {"role": m["role"], "content": str(m["content"])} for m in messages
-            ],
-        }
-        if system:
-            payload["system"] = system
+        turns = [
+            {"role": m["role"], "content": str(m["content"])} for m in messages
+        ]
+        budget = MAX_OUTPUT_TOKENS.get(self.provider, 4096)
 
-        request = urllib.request.Request(
-            ANTHROPIC_URL,
-            data=json.dumps(payload).encode(),
-            headers={
+        if self.provider == "openai":
+            # Chat Completions: the system prompt is a message rather than a
+            # top-level field, and the output cap is max_completion_tokens.
+            payload = {
+                "model": self.model,
+                "max_completion_tokens": budget,
+                "messages": ([{"role": "system", "content": system}] if system else []) + turns,
+            }
+            url = OPENAI_URL
+            headers = {
+                "authorization": f"Bearer {self._api_key}",
+                "content-type": "application/json",
+            }
+        else:
+            payload = {
+                "model": self.model,
+                "max_tokens": budget,
+                "messages": turns,
+            }
+            if system:
+                payload["system"] = system
+            url = ANTHROPIC_URL
+            headers = {
                 "x-api-key": self._api_key,
                 "anthropic-version": ANTHROPIC_VERSION,
                 "content-type": "application/json",
-            },
+            }
+
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode(),
+            headers=headers,
             method="POST",
         )
         try:
@@ -132,12 +165,27 @@ class Runtime:
             self.recorder.add("error", f"LLM call failed: {exc!r}")
             raise
 
-        text = "".join(
-            block.get("text", "")
-            for block in body.get("content", [])
-            if block.get("type") == "text"
-        )
-        usage = body.get("usage", {})
+        if self.provider == "openai":
+            choices = body.get("choices") or [{}]
+            message = choices[0].get("message") or {}
+            text = message.get("content") or ""
+            # A refusal arrives in its own field with content empty; surfacing it
+            # as the reply keeps it in the trajectory instead of looking like a
+            # silent empty turn.
+            if not text and message.get("refusal"):
+                text = f"[model refused] {message['refusal']}"
+            raw_usage = body.get("usage", {})
+            usage = {
+                "input_tokens": raw_usage.get("prompt_tokens", 0),
+                "output_tokens": raw_usage.get("completion_tokens", 0),
+            }
+        else:
+            text = "".join(
+                block.get("text", "")
+                for block in body.get("content", [])
+                if block.get("type") == "text"
+            )
+            usage = body.get("usage", {})
         self.usage["input_tokens"] += usage.get("input_tokens", 0)
         self.usage["output_tokens"] += usage.get("output_tokens", 0)
 

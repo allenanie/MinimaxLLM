@@ -10,17 +10,14 @@ across every cell of the ablation grid.
 from __future__ import annotations
 
 import json
-import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from anthropic import Anthropic
-
 from hopt.artifact import CodeArtifact, ArtifactError
 from hopt.config import RESULTS_DIR
-from hopt.env import ensure_process_keys
+from hopt.llm import LLMResponse, build_client
 from hopt.runner import RolloutBatch
 from hopt.trajectory import load_trajectory, render_for_optimizer
 
@@ -127,14 +124,10 @@ class ArtifactOptimizer:
         max_tokens: int = 64000,
         prompt_guard: Callable[[str], None] | None = None,
     ):
-        ensure_process_keys("ANTHROPIC_API_KEY")
-        key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-        if not key:
-            raise RuntimeError(
-                "ANTHROPIC_API_KEY is not set; the optimizer cannot run. "
-                "It is exported in ~/.zshrc -- source it or pass api_key=."
-            )
-        self.client = Anthropic(api_key=key)
+        # Provider comes from a "provider/model" prefix; a bare name is Anthropic,
+        # so existing configs are unchanged. See hopt/llm.py for why this is not
+        # just a client swap.
+        self.client = build_client(model, api_key)
         self.model = model
         self.max_tokens = max_tokens
         # Called on every assembled user message immediately before it is sent.
@@ -144,44 +137,26 @@ class ArtifactOptimizer:
         # deliberate call. Checking here covers every retry path too.
         self.prompt_guard = prompt_guard
 
-    def _message(self, system: str, user: str, max_tokens: int | None = None):
-        """One optimizer call.
+    def _message(self, system: str, user: str, max_tokens: int | None = None) -> LLMResponse:
+        """One optimizer call, provider-independent.
 
-        Streams whenever the output budget is large: the SDK refuses
-        non-streaming requests that could exceed 10 minutes, which rules out any
-        max_tokens above ~16k. Streaming is what makes a generous output budget
-        usable, and re-emitting a growing multi-file artifact needs one -- at 16k
-        the optimizer was truncating mid-file and burning a retry every iteration.
-
-        Note max_tokens is the *output* cap (Opus 5 allows 128k); the 1M figure is
-        the input context window, a different limit.
+        ``max_tokens`` is the *output* cap, not the context window. Provider
+        differences -- streaming thresholds, how the budget interacts with
+        reasoning tokens, stop-reason vocabulary -- are handled in hopt/llm.py so
+        the retry ladder below can branch on one set of names.
         """
         if self.prompt_guard is not None:
             self.prompt_guard(user)
-        budget = max_tokens or self.max_tokens
-        kwargs = dict(
-            model=self.model,
-            max_tokens=budget,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        if budget <= 8000:
-            return self.client.messages.create(**kwargs)
-        with self.client.messages.stream(**kwargs) as stream:
-            return stream.get_final_message()
-
+        return self.client.message(system, user, max_tokens or self.max_tokens)
 
     def _count_input_tokens(self, system: str, user: str) -> int | None:
-        """Exact token count for the request, or None if the endpoint is unavailable."""
-        try:
-            r = self.client.messages.count_tokens(
-                model=self.model,
-                system=system,
-                messages=[{"role": "user", "content": user}],
-            )
-            return int(r.input_tokens)
-        except Exception:
-            return None
+        """Exact token count, or None when the provider cannot say.
+
+        None is a supported answer, not a failure: ``_fit_prompt`` falls back to a
+        conservative chars-per-token estimate, which is also what happens during
+        an Anthropic counting outage.
+        """
+        return self.client.count_tokens(system, user)
 
     def _fit_prompt(self, system: str, user: str) -> tuple[str, bool]:
         """Shrink ``user`` until the request fits the input window.
@@ -302,7 +277,7 @@ class ArtifactOptimizer:
 
         user_msg, _was_truncated = self._fit_prompt(SYSTEM_PROMPT, user_msg)
         response = self._message(SYSTEM_PROMPT, user_msg)
-        raw = "".join(b.text for b in response.content if b.type == "text")
+        raw = response.text
 
         match = ARTIFACT_RE.search(raw)
         new_artifact = match.group(1).strip() if match else current_artifact
@@ -434,7 +409,7 @@ class CodeArtifactOptimizer(ArtifactOptimizer):
                 )
             except Exception:
                 continue
-            if getattr(response, "stop_reason", None) == "refusal":
+            if response.refused:
                 refusing.add(outcome.task_name)
         return refusing
 
@@ -525,14 +500,14 @@ class CodeArtifactOptimizer(ArtifactOptimizer):
                 )
                 user_msg = base_msg
                 continue
-            raw = "".join(b.text for b in response.content if b.type == "text")
+            raw = response.text
             files = {m.group(1).strip(): m.group(2) for m in FILE_RE.finditer(raw)}
 
             # Distinguish *why* nothing usable came back. Treating a refusal or a
             # length cutoff as "no <file> blocks" hides the cause and makes the
             # retry pointless -- the pilot re-sent an identical refused prompt
             # three times and reported it as a formatting problem.
-            stop = getattr(response, "stop_reason", None)
+            stop = response.stop_reason
             if stop in {"refusal", "max_tokens"} or not files:
                 if stop == "refusal":
                     # Escalating fallback: re-sending identical content refuses
