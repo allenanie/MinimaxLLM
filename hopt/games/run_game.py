@@ -75,10 +75,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--reference",
         default="oracle",
-        choices=("oracle", "empirical"),
-        help="Game 2 regret reference. oracle = 1.0, proven by the solvability "
-        "gate. empirical = best reward any harness has scored on that task. "
-        "Both are always recorded; this picks which one selection uses.",
+        choices=("oracle", "empirical", "harness"),
+        help="Game 2 reference point r(h*_x). oracle = 1.0 (upper bound: the gate "
+        "proves a gold SCRIPT solves it, not that an agent can). empirical = best "
+        "reward any harness has scored on it (lower bound). harness = roll a "
+        "reference harness on it and measure (+1 rollout batch/round). All are "
+        "recorded; this picks which one selects.",
     )
     p.add_argument("--harness", default="code-mono")
     p.add_argument("--batch-size", default="5", help="int, or 'full'")

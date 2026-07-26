@@ -322,3 +322,52 @@ class ReviewReportTest(SelfImproveLoopTest):
         # Completed in the second pass, after the harness was rolled out.
         self.assertAlmostEqual(meta["harness_reward"], 0.0)
         self.assertAlmostEqual(meta["regret_oracle"], 1.0)
+
+
+class ReferencePointTest(SelfImproveLoopTest):
+    """The gate proves a task is well-posed, not that an agent can solve it."""
+
+    def test_harness_mode_measures_the_reference_on_a_real_agent(self):
+        self.cfg.reference = "harness"
+        # The reference harness scores 0.6 where the current harness scores 0.0,
+        # so the measured shortfall is 0.6 -- not the 1.0 the oracle would claim.
+        original = selfimprove.run_batch
+
+        async def with_reference(cfg, dataset, task_names, artifact_path, job_name,
+                                 dataset_path=None):
+            if "refharness" in job_name:
+                self.rollout_calls.append({"job": job_name, "tasks": list(task_names)})
+                return _batch(self.tmp / "jobs", job_name,
+                              {n: 0.6 for n in task_names})
+            return await original(cfg, dataset, task_names, artifact_path,
+                                  job_name, dataset_path)
+
+        selfimprove.run_batch = with_reference
+        summary = asyncio.run(self.game.play())
+        by_id = {c["task_id"]: c for c in summary["rounds"][0]["candidates"]}
+
+        self.assertAlmostEqual(by_id["t01_0"]["reference_harness_reward"], 0.6)
+        self.assertAlmostEqual(by_id["t01_0"]["regret_harness"], 0.6)
+        # The oracle reference is still recorded, and still overstates it.
+        self.assertAlmostEqual(by_id["t01_0"]["regret_oracle"], 1.0)
+        # Selection used the measured one.
+        self.assertAlmostEqual(summary["rounds"][0]["selected_regret"], 0.6)
+
+    def test_a_task_no_agent_can_touch_is_flagged(self):
+        # Both candidates pass the gate -- a gold script solves them -- but no
+        # harness ever scores. That is the case the gate cannot catch.
+        self.harness_rewards = {"t01_0": 0.0, "t01_1": 0.0, "t00_seed": 0.0}
+        self.cfg.unsolved_rounds_before_flag = 1
+        summary = asyncio.run(self.game.play())
+        record = summary["rounds"][0]
+
+        self.assertIn("t01_0", record["suspected_impossible"])
+        self.assertIn("t01_1", record["suspected_impossible"])
+        # And the proposer is told, so it stops producing more of them.
+        self.assertIn("NO AGENT HAS EVER SCORED ON THIS", self.game._pool_summary())
+
+    def test_a_solved_task_is_never_flagged(self):
+        self.cfg.unsolved_rounds_before_flag = 1
+        summary = asyncio.run(self.game.play())
+        # t01_1 scores 1.0, so it resets rather than accumulating.
+        self.assertNotIn("t01_1", summary["rounds"][0]["suspected_impossible"])

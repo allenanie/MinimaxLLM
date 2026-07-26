@@ -49,12 +49,25 @@ class GameConfig:
     #: bundle it must emit. Kept small: they are large, and their job is to fix
     #: the format and difficulty register, not to be a corpus.
     n_grounding_tasks: int = 2
-    #: Reference point for Game 2 regret.
-    #:   oracle    -- 1.0, proven by the solvability gate. Ground truth given the
-    #:                draft's expressiveness assumption (main.tex:126).
-    #:   empirical -- best reward any harness version has scored on that task.
-    #: Both are always recorded; this picks which one selection uses.
+    #: Reference point for Game 2 regret -- the r(h*_x; x) term.
+    #:   oracle    -- 1.0. The gate proved a *solution* exists, but the solution is
+    #:                a shell script, not a harness, so this is an UPPER BOUND that
+    #:                holds only under the draft's expressiveness assumption
+    #:                (main.tex:126). A task that is script-solvable but beyond any
+    #:                agent scores maximally here, which the adversary is rewarded
+    #:                for finding.
+    #:   empirical -- best reward any harness version has scored on that task. A
+    #:                lower bound, and undefined for a task nobody has attempted.
+    #:   harness   -- roll a reference harness on the task and use its reward. The
+    #:                only mode where r(h*_x) is measured on an actual agent rather
+    #:                than assumed or accumulated. Costs one extra rollout batch
+    #:                per round.
+    #: All available modes are recorded every round; this picks which one selects.
     reference: str = "oracle"
+    #: Rounds a pool task may go with no harness scoring above zero before it is
+    #: flagged as suspected agent-impossible. Such a task maximizes the oracle
+    #: score forever without measuring anything, so the proposer is told about it.
+    unsolved_rounds_before_flag: int = 2
     #: Detector representation (Game 1 only).
     detector_kind: str = "code"
     #: How much of the detector's output reaches the harness optimizer.
@@ -101,9 +114,10 @@ class GameConfig:
             raise ValueError("epsilon must be >= 0")
         if self.reference_k is not None and self.reference_k < 1:
             raise ValueError("reference_k must be >= 1 or None (whole archive)")
-        if self.reference not in ("oracle", "empirical"):
+        if self.reference not in ("oracle", "empirical", "harness"):
             raise ValueError(
-                f"unknown reference {self.reference!r}; choose from ('oracle', 'empirical')"
+                f"unknown reference {self.reference!r}; "
+                "choose from ('oracle', 'empirical', 'harness')"
             )
         if self.n_candidates < 1:
             raise ValueError("n_candidates must be >= 1")

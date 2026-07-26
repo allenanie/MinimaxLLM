@@ -7,18 +7,33 @@ solution, and the image they run in. The harness must solve whatever survives.
 
 **Why this game is the one to verify first.** Game 1's constraint set
 $\\mathcal{H}_t$ rests on $\\mathcal{D}_t$, and there is no ground truth for whether a
-trajectory "really" cheated -- the labels are an oracle's opinion. Game 2 has
-ground truth and it is cheap: run the reference solution. Either it scores 1.0 or
-the task is not solvable, and no judgment call is involved.
+trajectory "really" cheated -- the labels are an oracle's opinion. Game 2 has a
+fact instead: run the gold solution. Either it scores 1.0 or the task is not
+well-posed, and no judgment is involved.
 
-That fact also fixes the reference point that Game 1 can only approximate. The
-draft assumes the harness class is expressive enough to solve any proposed task
-(``main.tex:126``); under that assumption a gated task has $r(h^*_x; x) = 1.0$
-**by construction**, because the gate just exhibited a solution. So Game 2's
-regret is a real quantity, not the optimistic lower bound that
-``hopt/games/archive.py`` is stuck with. The empirical alternative -- best reward
-any harness has actually scored on that task -- is recorded alongside every round
-so the assumption can be checked rather than trusted.
+**What the gate does and does not establish.** It proves the instruction, the
+verifier and the gold solution are mutually consistent -- the task is *well
+posed*. It does **not** prove an agent can solve it: the gold solution is a shell
+script the proposer wrote, not a harness that had to discover anything. So
+$r(h^*_x; x) = 1.0$ is an upper bound resting on the draft's expressiveness
+assumption (``main.tex:126``), not a measurement, and a task that is
+script-solvable but beyond any agent maximizes the adversary's score forever
+while teaching the harness nothing. The gate closes "no solution exists"; it does
+not close "no agent can find the solution."
+
+Three references are therefore recorded for every candidate, and ``cfg.reference``
+picks which one selects:
+
+* ``oracle`` -- 1.0. Cheap, and an upper bound.
+* ``empirical`` -- best reward any harness version has scored on the task. A
+  lower bound, and undefined until someone has attempted it.
+* ``harness`` -- roll a reference harness on the task and use its reward. The
+  only one measured on an actual agent. One extra rollout batch per round.
+
+Independently, a pool task that no harness scores on for
+``unsolved_rounds_before_flag`` rounds is flagged as suspected agent-impossible,
+reported in the round record, and shown to the proposer as something not to
+repeat.
 
 Three structural points:
 
@@ -75,10 +90,16 @@ class Candidate:
     task_id: str
     admitted: bool = False
     reason: str = ""
+    #: What the gold script scored. 1.0 for anything admitted -- proof the task is
+    #: well-posed, NOT proof an agent can solve it.
     oracle_reward: float | None = None
     harness_reward: float | None = None
+    #: What a reference *harness* scored, when cfg.reference == "harness". The only
+    #: one of the three references measured on an actual agent.
+    reference_harness_reward: float | None = None
     regret_oracle: float | None = None
     regret_empirical: float | None = None
+    regret_harness: float | None = None
     instruction: str = ""
     rejected_by_optimizer: list[str] = field(default_factory=list)
 
@@ -90,8 +111,10 @@ class Candidate:
             "reason": self.reason,
             "oracle_reward": self.oracle_reward,
             "harness_reward": self.harness_reward,
+            "reference_harness_reward": self.reference_harness_reward,
             "regret_oracle": self.regret_oracle,
             "regret_empirical": self.regret_empirical,
+            "regret_harness": self.regret_harness,
             "optimizer_rejections": self.rejected_by_optimizer,
         }
 
@@ -156,6 +179,11 @@ class SelfImprovingGame(MinimaxGame):
         #: Every gate outcome, so the proposer learns what keeps failing instead
         #: of rediscovering the same broken verifier shape each round.
         self.gate_history: list[dict] = []
+        #: task_id -> consecutive rounds with no harness scoring above zero. The
+        #: gate proves a task is well-posed, not that an agent can do it, so a
+        #: task can pass the gate and still be beyond the policy class -- and it
+        #: would then maximize the oracle score forever while measuring nothing.
+        self.unsolved_rounds: dict[str, int] = {}
         self._load_state()
 
     # --- state ------------------------------------------------------------
@@ -170,14 +198,30 @@ class SelfImprovingGame(MinimaxGame):
             return
         self.best_seen = payload.get("best_seen", {})
         self.gate_history = payload.get("gate_history", [])
+        self.unsolved_rounds = payload.get("unsolved_rounds", {})
 
     def _save_state(self) -> None:
         self._state_path.write_text(
             json.dumps(
-                {"best_seen": self.best_seen, "gate_history": self.gate_history},
+                {
+                    "best_seen": self.best_seen,
+                    "gate_history": self.gate_history,
+                    "unsolved_rounds": self.unsolved_rounds,
+                },
                 indent=2,
             )
         )
+
+    def suspected_impossible(self) -> list[str]:
+        """Pool tasks no harness has ever scored above zero on.
+
+        Not proof -- the task may just be hard -- but a task in this list has
+        contributed nothing but a maximal score to the adversary for several
+        rounds, which is exactly the failure mode the solvability gate does not
+        catch.
+        """
+        threshold = self.cfg.unsolved_rounds_before_flag
+        return sorted(t for t, n in self.unsolved_rounds.items() if n >= threshold)
 
     # --- wiring -----------------------------------------------------------
     @property
@@ -419,6 +463,27 @@ class SelfImprovingGame(MinimaxGame):
                 candidate.regret_empirical = (
                     max(0.0, prior_best - reward) if prior_best is not None else None
                 )
+
+            # The measured reference: what an actual harness achieves on this
+            # task. One batch for all candidates, not one per candidate.
+            if cfg.reference == "harness":
+                ref_batch = await run_batch(
+                    cfg.exp,
+                    dataset=cfg.train_dataset,
+                    task_names=[c.task_id for c, _ in admitted_artifacts],
+                    artifact_path=self._reference_harness().root,
+                    job_name=f"{cfg.run_name}__{self.name}__r{round_idx:02d}__refharness",
+                    dataset_path=self.pool_dir,
+                )
+                ref_by_task = {o.task_name: o.reward for o in ref_batch.outcomes}
+                for candidate, _ in admitted_artifacts:
+                    ref = ref_by_task.get(candidate.task_id)
+                    if ref is None or candidate.harness_reward is None:
+                        continue
+                    candidate.reference_harness_reward = ref
+                    candidate.regret_harness = max(0.0, ref - candidate.harness_reward)
+                self._record_pool_rewards(ref_batch)
+
             self._record_pool_rewards(new_batch)
             # Complete the records written at gate time, now that the harness has
             # actually been scored on these tasks.
@@ -466,12 +531,33 @@ class SelfImprovingGame(MinimaxGame):
             "task_pool_size": len(self._admitted()),
             "pool_mean_reward": merged.mean_reward,
             "best_seen": dict(self.best_seen),
+            "unsolved_rounds": dict(self.unsolved_rounds),
+            # Passed the gate, so well-posed, but no agent has ever scored on it.
+            # These inflate the oracle-referenced score without measuring anything.
+            "suspected_impossible": self.suspected_impossible(),
         }
 
+    def _reference_harness(self):
+        """The harness whose reward stands in for r(h*_x; x) in ``harness`` mode.
+
+        The seed harness: an ordinary member of the policy class, so its score is
+        something an agent demonstrably achieved -- unlike the gold script, which
+        proves only that the task is well-posed.
+        """
+        from hopt.artifact import CodeArtifact
+
+        return CodeArtifact.from_seed(
+            self.cfg.exp.seed_artifact_path,
+            ARTIFACTS_DIR / self.cfg.run_name / "reference_harness",
+            self.cfg.exp.entrypoint_spec,
+        )
+
     def _regret_of(self, candidate: Candidate) -> float | None:
-        if self.cfg.reference == "oracle":
-            return candidate.regret_oracle
-        return candidate.regret_empirical
+        return {
+            "oracle": candidate.regret_oracle,
+            "empirical": candidate.regret_empirical,
+            "harness": candidate.regret_harness,
+        }[self.cfg.reference]
 
     def _select(self, candidates: list[Candidate]) -> Candidate | None:
         """max over (x, v_x). Only gated candidates with a measured reward count."""
@@ -487,6 +573,12 @@ class SelfImprovingGame(MinimaxGame):
             prior = self.best_seen.get(outcome.task_name)
             if prior is None or outcome.reward > prior:
                 self.best_seen[outcome.task_name] = outcome.reward
+            if self.best_seen.get(outcome.task_name, 0.0) > 0:
+                self.unsolved_rounds[outcome.task_name] = 0
+            else:
+                self.unsolved_rounds[outcome.task_name] = (
+                    self.unsolved_rounds.get(outcome.task_name, 0) + 1
+                )
 
     # --- adversary context ----------------------------------------------------
     def _adversary_sections(self) -> tuple[tuple[str, str], ...]:
@@ -544,9 +636,20 @@ class SelfImprovingGame(MinimaxGame):
                 else "(no instruction)"
             )
             best = self.best_seen.get(path.name)
+            stale = path.name in self.suspected_impossible()
             lines.append(
                 f"  {path.name}: best_reward="
-                f"{'n/a' if best is None else f'{best:.2f}'} — {first_line}"
+                f"{'n/a' if best is None else f'{best:.2f}'}"
+                + ("  [NO AGENT HAS EVER SCORED ON THIS]" if stale else "")
+                + f" — {first_line}"
+            )
+        if self.suspected_impossible():
+            lines.append(
+                "\nTasks marked [NO AGENT HAS EVER SCORED ON THIS] passed the gate -- "
+                "a gold script solves them -- but no agent has managed any credit "
+                "after several rounds. They are probably beyond what an agent can "
+                "do in this setting, not merely hard. Do not propose more like "
+                "them: a task an agent can never touch teaches the harness nothing."
             )
         return "\n".join(lines)
 
