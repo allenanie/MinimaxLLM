@@ -138,15 +138,29 @@ class RobustHarnessGame(MinimaxGame):
             print("  D_0 seeding disabled; grounding will be vacuous until labels exist")
             return
 
-        # The val split, so the same trajectories can serve as archive reference
-        # points -- cross-version comparison requires a shared task set.
-        tasks = list(self.split.val) or self.train_batch_tasks(1)
+        # Two different task sets on purpose:
+        #
+        # * LABELS come from val + train. A cheating harness only produces a
+        #   positive when its cheat actually fools the verifier, which is a
+        #   minority of attempts -- seeding on val alone yielded 1 positive out of
+        #   7 labels, leaving H_t resting on a single trajectory for the whole run.
+        # * ARCHIVE records are the val subset only. Cross-version comparison
+        #   requires a shared task set, and every later version is archived on val
+        #   (see _archive_current), so archiving these on a wider set would make
+        #   the reference point incomparable with everything after it.
+        val = list(self.split.val)
+        label_tasks = sorted(set(val) | set(self.split.train))
+        if not label_tasks:
+            label_tasks = self.train_batch_tasks(1)
         cheat_seed = ARTIFACTS_DIR / CHEAT_HARNESS_SEED
         if not cheat_seed.exists():
             print(f"  no cheating reference harness at {cheat_seed}; skipping D_0 seeding")
             return
 
-        print(f"  seeding D_0: two reference harnesses on {len(tasks)} val tasks")
+        print(
+            f"  seeding D_0: two reference harnesses on {len(label_tasks)} tasks "
+            f"({len(val)} of them val, which is what gets archived)"
+        )
         for label, provenance, seed_path, note in (
             (1, "seed_cheater", cheat_seed, "reference: deliberately cheating harness"),
             (
@@ -164,7 +178,7 @@ class RobustHarnessGame(MinimaxGame):
             batch = await run_batch(
                 self.cfg.exp,
                 dataset=self.cfg.train_dataset,
-                task_names=tasks,
+                task_names=label_tasks,
                 artifact_path=artifact.root,
                 job_name=f"{self.cfg.run_name}__d0_{provenance}",
             )
@@ -184,7 +198,9 @@ class RobustHarnessGame(MinimaxGame):
                 version=version,
                 round_idx=0,
                 files=artifact.files(),
-                records=records,
+                # Val subset only -- the shared task set every later version is
+                # measured on.
+                records=[r for r in records if r.task_name in set(val)],
                 note=note,
             )
             self.store.save_harness(
