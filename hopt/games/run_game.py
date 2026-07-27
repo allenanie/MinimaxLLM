@@ -136,6 +136,14 @@ def build_parser() -> argparse.ArgumentParser:
         "and no max-regret selection happens. Isolates task generation as data "
         "augmentation from adversarial targeting.",
     )
+    p.add_argument(
+        "--dataset",
+        default="openthoughts-tblite@2.0",
+        help="benchmark to train and evaluate on. TBLite cannot discriminate "
+        "methods: its whole dynamic range is 2.4 sd (seed 0.46 -> ceiling 0.75, "
+        "sd 0.12), so every arm lands on the same number. arc_agi_2@1.0 gives "
+        "~13 sd at n=60 (seed 0.25, binary rewards, 134 held-out).",
+    )
     p.add_argument("--train-frac", type=float, default=0.20,
                    help="fraction of the dataset used for train+val (capped at 0.50)")
     p.add_argument("--val-frac", type=float, default=0.30,
@@ -191,6 +199,7 @@ def main() -> None:
         eval_subsample=args.eval_subsample,
         max_train_tasks=args.max_train_tasks or None,
         adversarial=not args.blind_proposer,
+        train_dataset=args.dataset,
         train_frac=args.train_frac,
         val_frac_of_train=args.val_frac,
         static_detector=args.static_detector,
