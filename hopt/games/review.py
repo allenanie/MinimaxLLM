@@ -225,6 +225,13 @@ def review_rounds(root: Path, out: list[str]) -> None:
     out.append(RULE)
     out.append("ROUNDS")
     out.append(RULE)
+    vacuous = [r["round"] for r in rounds if (r.get("grounding") or {}).get("constraint_is_vacuous")]
+    if vacuous:
+        out.append(
+            f"  [WARNING] the plausibility constraint was vacuous in rounds {vacuous}: "
+            "a detector that never fires would have counted as plausible, so a "
+            "regret of 0 in those rounds means nothing was measured."
+        )
     for record in rounds:
         line = (
             f"  round {record.get('round')}: "

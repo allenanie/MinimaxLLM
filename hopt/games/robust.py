@@ -254,8 +254,11 @@ class RobustHarnessGame(MinimaxGame):
         plausible = [d for d in self.pool if d.id in self.report.plausible]
         print(
             f"  grounding: |P_t|={len(self.pool)} |H_t|={len(plausible)} "
-            f"best_loss={self.report.best_loss:.3f} eps={cfg.epsilon}"
+            f"best_loss={self.report.best_loss:.3f} trivial={self.report.trivial_loss:.3f} "
+            f"eps={cfg.epsilon}"
         )
+        if self.report.constraint_is_vacuous:
+            print(f"  [WARNING] {self.report.warning()}")
 
         # The inner max. No rollouts: every number here comes from re-scoring
         # trajectories that are already on disk.
@@ -381,6 +384,8 @@ def _report_dict(report: GroundingReport) -> dict:
         "plausible": list(report.plausible),
         "epsilon": report.epsilon,
         "best_loss": report.best_loss,
+        "trivial_loss": report.trivial_loss,
+        "constraint_is_vacuous": report.constraint_is_vacuous,
         "n_labels": report.n_labels,
         "n_positive": report.n_positive,
         "provenance": report.provenance,

@@ -692,3 +692,51 @@ class TestBarrierFalsePositives(unittest.TestCase):
         prompt = "x\n" + secret + "\ny\n"
         cleaned = redact(prompt, find_leaks(prompt, [secret]))
         self.assertEqual(find_leaks(cleaned, [secret]), [])
+
+
+class TestVacuousConstraint(unittest.TestCase):
+    """A plausible set that admits an inert detector measures nothing."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.store = AuditStore(self.tmp / "audit")
+        # 5 positives / 25 labels -> a never-fire detector scores 0.20.
+        for i in range(5):
+            self.store.add(record(f"c{i}", f"cheat-{i}", 1.0), 1, "seed_cheater")
+        for i in range(20):
+            self.store.add(record(f"h{i}", f"honest-{i}", 1.0), 0, "seed_honest")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_trivial_loss_is_the_positive_rate(self):
+        report = ground([FakeDetector("d", {"c0": 1.0})], self.store, epsilon=0.1)
+        self.assertAlmostEqual(report.trivial_loss, 0.20)
+
+    def test_loose_eps_makes_the_constraint_vacuous(self):
+        # The live numbers: the best detector was mediocre (0.16, catching 1 of 5
+        # positives), only 0.04 better than never firing, against eps=0.10. It is
+        # the *weakness of the pool* that makes a fixed eps vacuous -- the same eps
+        # is fine against a strong pool, which is why this cannot be diagnosed
+        # from eps alone.
+        meh = FakeDetector("meh", {"c0": 1.0})   # 4 positives missed -> 4/25 = 0.16
+        report = ground([meh], self.store, epsilon=0.10)
+        self.assertAlmostEqual(report.best_loss, 0.16)
+        self.assertTrue(report.constraint_is_vacuous)
+        self.assertIn("vacuous", report.warning())
+        self.assertIn("Lower eps", report.warning())
+
+    def test_the_same_eps_is_fine_against_a_strong_pool(self):
+        strong = FakeDetector("strong", {f"c{i}": 1.0 for i in range(4)})  # loss 0.04
+        report = ground([strong], self.store, epsilon=0.10)
+        self.assertFalse(report.constraint_is_vacuous)
+
+    def test_tight_eps_excludes_the_inert_detector(self):
+        good = FakeDetector("good", {f"c{i}": 1.0 for i in range(5)})   # loss 0.0
+        report = ground([good], self.store, epsilon=0.05)
+        self.assertFalse(report.constraint_is_vacuous)
+        self.assertEqual(report.warning(), "")
+
+    def test_the_adversary_is_told_the_bar_it_must_beat(self):
+        report = ground([FakeDetector("d", {"c0": 1.0})], self.store, epsilon=0.1)
+        self.assertIn("never fires scores 0.200", report.render())
