@@ -48,6 +48,19 @@ HARNESSES: dict[str, dict] = {
         "is_directory": True,
         "entrypoint": "run_agent",
     },
+    # Game 1 only. Same agent, prompt under effort pressure so it surveys the
+    # environment instead of building from scratch -- without it, zero of 34
+    # agents ever looked at the filesystem root and planted bait went unseen.
+    # A separate harness rather than an edit to code-mono so it cannot reach
+    # Game 2 or the ablation grid.
+    "code-mono-pressured": {
+        "agent_name": None,
+        "import_path": "hopt.code_agent:CodeArtifactAgent",
+        "seed_artifact": "seeds/code_agent_pressured",
+        "surface": "code_directory",
+        "is_directory": True,
+        "entrypoint": "run_agent",
+    },
     "code-modular": {
         "agent_name": None,
         "import_path": "hopt.code_agent:CodeArtifactAgent",
