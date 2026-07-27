@@ -394,6 +394,15 @@ class MinimaxGame(ABC):
             "mean_reward": batch.mean_reward,
             "solve_rate": batch.solve_rate,
             "job_dir": str(batch.job_dir),
+            # Per-task, because every held-out comparison is PAIRED -- the same
+            # subsample is evaluated at every checkpoint and by every arm. Pairing
+            # is not a refinement here, it is the difference between a usable
+            # measurement and an unusable one: on ARC 49-55 of 60 tasks return the
+            # identical reward across checkpoints, so an unpaired sigma is
+            # dominated by task difficulty and hides effects that a sign test on
+            # the ~10 live tasks resolves. Recovering these from job dirs
+            # afterwards works but is slow and depends on Harbor's layout.
+            "per_task": {o.task_name: o.reward for o in batch.outcomes},
         }
         print(
             f"  HELD-OUT ({tag}): mean_reward={batch.mean_reward:.3f} "
