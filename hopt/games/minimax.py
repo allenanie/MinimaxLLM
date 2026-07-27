@@ -160,6 +160,14 @@ class MinimaxGame(ABC):
 
         await self.setup()
 
+        # Baseline before any optimization, so the final number has something to
+        # be compared against.
+        heldout: list[dict] = []
+        if start == 1:
+            base = await self.evaluate_heldout(harness, "round00_baseline")
+            if base:
+                heldout.append(base)
+
         for round_idx in range(start, cfg.n_rounds + 1):
             print(f"\n[{self.name}] === round {round_idx}/{cfg.n_rounds} ===")
             self.current_harness = harness
@@ -257,10 +265,22 @@ class MinimaxGame(ABC):
                 "verdict_cache": {"hits": self.cache.hits, "misses": self.cache.misses},
                 **extra,
             }
+            if cfg.eval_every and round_idx % cfg.eval_every == 0:
+                ev = await self.evaluate_heldout(harness, f"round{round_idx:02d}")
+                if ev:
+                    heldout.append(ev)
+                    record["heldout"] = ev
             self.store.save_round(round_idx, record)
+
+        final_eval = await self.evaluate_heldout(harness, "final")
+        if final_eval:
+            heldout.append(final_eval)
 
         summary = {
             "game": self.name,
+            # The metric that answers whether the game worked: the real benchmark
+            # split, never trained on, never containing a generated task.
+            "heldout": heldout,
             "run_dir": str(cfg.run_dir),
             "config": cfg.as_dict(),
             "rounds": self.store.load_rounds(),
@@ -314,6 +334,50 @@ class MinimaxGame(ABC):
             {"round": round_idx, "state": "rolled_out", "n_val_records": len(records)},
         )
         return records
+
+    async def evaluate_heldout(self, harness: CodeArtifact, tag: str) -> dict | None:
+        """Score the harness on the REAL benchmark held-out split.
+
+        Deliberately not the training batches and not Game 2's generated pool.
+        Both of those move: train batches are resampled per round, and the task
+        pool is made harder every round by an adversary that is rewarded for
+        exactly that. A flat number on either is uninterpretable. The held-out
+        split is fixed, was never trained on, and never contains a generated
+        task -- so a change in this series is a change in the harness.
+
+        Deterministic subsample: every evaluation in a run scores the same tasks,
+        or the series measures task difficulty instead of progress.
+        """
+        tasks = sorted(self.split.test)
+        if not tasks:
+            return None
+        if self.cfg.eval_subsample and len(tasks) > self.cfg.eval_subsample:
+            import random
+
+            tasks = sorted(
+                random.Random(f"{self.cfg.split_seed}:heldout").sample(
+                    tasks, self.cfg.eval_subsample
+                )
+            )
+        batch = await run_batch(
+            self.cfg.exp,
+            dataset=self.cfg.train_dataset,
+            task_names=tasks,
+            artifact_path=harness.root,
+            job_name=f"{self.cfg.run_name}__{self.name}__heldout_{tag}",
+        )
+        result = {
+            "tag": tag,
+            "n": len(batch.outcomes),
+            "mean_reward": batch.mean_reward,
+            "solve_rate": batch.solve_rate,
+            "job_dir": str(batch.job_dir),
+        }
+        print(
+            f"  HELD-OUT ({tag}): mean_reward={batch.mean_reward:.3f} "
+            f"solve_rate={batch.solve_rate:.2f} on {len(batch.outcomes)} unseen tasks"
+        )
+        return result
 
     def train_batch_tasks(self, round_idx: int) -> list[str]:
         return batch_for_iteration(

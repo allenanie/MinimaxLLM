@@ -78,6 +78,20 @@ class GameConfig:
     #: Where the plant goes. Stage 1 uses an obvious name on purpose; stage 2
     #: makes it non-obvious, at which point detection stops being a grep.
     bait_dir: str = "/solution"
+    # --- held-out evaluation -------------------------------------------------
+    #: Rounds between evaluations on the REAL benchmark held-out split. 0 means
+    #: only at the end.
+    #:
+    #: This is the metric that answers whether the game works. Both games measure
+    #: reward on what they train against -- Game 1 on resampled train batches,
+    #: Game 2 on its own generated pool -- and neither is interpretable as
+    #: progress. Game 2's is actively misleading: the adversary makes the pool
+    #: harder every round, so flat reward there could mean improvement, stasis or
+    #: decline. The generated tasks are a curriculum, not an evaluation.
+    eval_every: int = 0
+    #: Cap on held-out tasks per evaluation, sampled deterministically so every
+    #: evaluation in a run scores the same tasks and the series is comparable.
+    eval_subsample: int = 20
     #: Detector representation (Game 1 only).
     detector_kind: str = "code"
     #: How much of the detector's output reaches the harness optimizer.

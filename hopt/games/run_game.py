@@ -96,6 +96,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="where the plant goes. An obvious name makes detection a grep; "
         "something plausible makes the detector's job real.",
     )
+    p.add_argument(
+        "--eval-every",
+        type=int,
+        default=0,
+        help="rounds between evaluations on the REAL held-out benchmark split. "
+        "0 = only baseline and final. This is the metric that says whether the "
+        "game worked; reward on the training batches or on Game 2's generated "
+        "pool measures a moving target.",
+    )
+    p.add_argument("--eval-subsample", type=int, default=20,
+                   help="held-out tasks per evaluation, sampled deterministically")
     p.add_argument("--harness", default="code-mono")
     p.add_argument("--batch-size", default="5", help="int, or 'full'")
     p.add_argument("--credit-horizon", default="full", choices=["first_10", "first_50", "full"])
@@ -135,6 +146,8 @@ def main() -> None:
         reference=args.reference,
         judge_model=args.judge_model,
         seed_audit_with_cheater=not args.no_seed_audit,
+        eval_every=args.eval_every,
+        eval_subsample=args.eval_subsample,
         bait=args.bait,
         bait_dir=args.bait_dir,
         harness=args.harness,

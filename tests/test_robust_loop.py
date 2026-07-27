@@ -328,8 +328,19 @@ class RobustLoopTest(unittest.TestCase):
         fresh.harness_player.optimizer.step_code = StubOptimizer(fresh.harness_player)
         fresh.adversary.optimizer.step_code = StubOptimizer(fresh.adversary)
         __import__("asyncio").run(fresh.play())
-        # n_rounds is 1 and round 1 is done, so no new rollouts should happen.
-        self.assertEqual(len(self.rollouts.calls), n_calls)
+
+        # n_rounds is 1 and round 1 is done, so no ROUND rollouts should repeat.
+        # The final held-out evaluation still runs -- that is deliberate, it is
+        # how a resumed run reports the number the experiment is actually about.
+        new_calls = self.rollouts.calls[n_calls:]
+        self.assertTrue(
+            all("heldout" in c["job_name"] for c in new_calls),
+            f"resume re-ran non-eval jobs: {[c['job_name'] for c in new_calls]}",
+        )
+        self.assertEqual(len(self.store_rounds()), 1)
+
+    def store_rounds(self):
+        return sorted((self.cfg.run_dir / "rounds").glob("round*.json"))
 
 
 if __name__ == "__main__":

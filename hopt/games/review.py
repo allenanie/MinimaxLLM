@@ -274,6 +274,22 @@ def build_review(run_dir: Path, full: bool = False) -> str:
             f"n_candidates={config.get('n_candidates')}"
         )
         out.append(f"  harness={config.get('harness')} model={config.get('model_name')}")
+    summary = _load(run_dir / "summary.json") or {}
+    held = summary.get("heldout") or []
+    if held:
+        out.append("")
+        out.append(RULE)
+        out.append("HELD-OUT BENCHMARK (never trained on; no generated tasks)")
+        out.append(RULE)
+        out.append("The only series that answers whether the harness improved.")
+        for e in held:
+            out.append(
+                f"  {e['tag']:<20} mean_reward={e['mean_reward']:.3f} "
+                f"solve_rate={e['solve_rate']:.2f}  (n={e['n']})"
+            )
+        if len(held) >= 2:
+            delta = held[-1]["mean_reward"] - held[0]["mean_reward"]
+            out.append(f"  net change baseline -> final: {delta:+.3f}")
     review_rounds(run_dir, out)
     review_detectors(run_dir, full, out)
     review_tasks(run_dir, full, out)
