@@ -15,7 +15,7 @@ from pathlib import Path
 from hopt.config import ExperimentConfig, RESULTS_DIR
 from hopt.games.views import BarrierDepth, DEFAULT_REASON_MAX_CHARS
 
-GAMES = ("robust", "selfimprove")
+GAMES = ("robust", "selfimprove", "baseline")
 DETECTOR_KINDS = ("code", "judge")
 
 
@@ -64,6 +64,18 @@ class GameConfig:
     #:                per round.
     #: All available modes are recorded every round; this picks which one selects.
     reference: str = "oracle"
+    #: Whether the task proposer plays the minimax game at all.
+    #:
+    #: False = the ablation control: a BLIND proposer. It never sees the harness
+    #: source or its execution traces, and there is no max-regret selection --
+    #: every gated task is admitted. It generates tasks grounded only in real
+    #: benchmark examples, which is task generation as plain data augmentation.
+    #:
+    #: The contrast with adversarial=True is what attributes a held-out gain to
+    #: the minimax structure rather than to having more tasks. Without it, Game
+    #: 2's result cannot distinguish "adversarial targeting works" from
+    #: "generated tasks are useful training data".
+    adversarial: bool = True
     #: Rounds a pool task may go with no harness scoring above zero before it is
     #: flagged as suspected agent-impossible. Such a task maximizes the oracle
     #: score forever without measuring anything, so the proposer is told about it.
@@ -116,6 +128,14 @@ class GameConfig:
     #: trajectories become the positive labels. Without positives, every detector
     #: has loss 0 by predicting "never cheats" and the grounding step is vacuous.
     seed_audit_with_cheater: bool = True
+
+    #: Cap on REAL training tasks the harness may learn from. None = the whole
+    #: train split. This is the data-efficiency axis: task generation is only
+    #: interesting if it substitutes for real data, so the honest comparison is
+    #: against a control given the same (small) number of real tasks, not
+    #: against one given all of them. Applied after the split so val and test are
+    #: untouched and every configuration is scored on identical held-out tasks.
+    max_train_tasks: int | None = None
 
     # --- rollouts (forwarded to ExperimentConfig) --------------------------
     harness: str = "code-mono"

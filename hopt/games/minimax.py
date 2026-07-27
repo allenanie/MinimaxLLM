@@ -51,6 +51,18 @@ class MinimaxGame(ABC):
             cfg.split_seed,
             val_frac_of_train=cfg.val_frac_of_train,
         )
+        if cfg.max_train_tasks is not None:
+            # Truncate deterministically from the sorted split so a given cap
+            # always names the same tasks: the arms must differ in how many real
+            # tasks they see, not in which ones.
+            import dataclasses
+
+            kept = tuple(sorted(self.split.train)[: cfg.max_train_tasks])
+            self.split = dataclasses.replace(self.split, train=kept)
+            print(
+                f"[{self.name}] train split capped to {len(kept)} real task(s): "
+                f"{list(kept)}"
+            )
         self.archive = HarnessArchive(cfg.run_dir / "archive.json")
         self.cache = VerdictCache(self.store.verdict_cache_path)
         self.artifact_root = ARTIFACTS_DIR / cfg.run_name

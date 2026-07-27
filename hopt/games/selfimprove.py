@@ -288,6 +288,24 @@ class SelfImprovingGame(MinimaxGame):
         return dest
 
     # --- the adversary's turn: several candidates ---------------------------
+    def _blind(self, view: MaximizerView) -> MaximizerView:
+        """Strip everything about the harness from the proposer's view.
+
+        The control has to be blind at the *view*, not merely unselected: most of
+        the adversarial signal arrives by reading the policy and its failures, so
+        a proposer that still sees those is only missing the argmax. Removing the
+        harness source, the rollout batch and the trajectories leaves generation
+        grounded solely in real benchmark examples.
+        """
+        empty = RolloutBatch(job_dir=view.batch.job_dir, outcomes=[])
+        sections = tuple(
+            (h, b) for h, b in view.sections
+            if "HARNESS" not in h.upper() and "POOL" in h.upper() or "REAL TASKS" in h.upper()
+        )
+        return MaximizerView(
+            harness_files={}, batch=empty, records=[], sections=sections, pool=view.pool
+        )
+
     async def adversary_move(self, round_idx: int, view: MaximizerView):
         """Propose ``n_candidates`` tasks, each aware of the ones before it.
 
@@ -298,6 +316,8 @@ class SelfImprovingGame(MinimaxGame):
         goal -- N near-identical tasks would make the max over candidates
         meaningless.
         """
+        if not self.cfg.adversarial:
+            view = self._blind(view)
         proposed_so_far: list[str] = []
         step = None
         for index in range(self.cfg.n_candidates):
@@ -572,7 +592,13 @@ class SelfImprovingGame(MinimaxGame):
         }[self.cfg.reference]
 
     def _select(self, candidates: list[Candidate]) -> Candidate | None:
-        """max over (x, v_x). Only gated candidates with a measured reward count."""
+        """max over (x, v_x). Only gated candidates with a measured reward count.
+
+        Disabled in the blind control: with no targeting there is no argmax to
+        take, and reporting one would imply a selection the arm never made.
+        """
+        if not self.cfg.adversarial:
+            return None
         scored = [
             c for c in candidates if c.admitted and self._regret_of(c) is not None
         ]

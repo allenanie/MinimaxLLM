@@ -13,11 +13,16 @@ import json
 
 from hopt.games.config import DETECTOR_KINDS, GAMES, GameConfig
 from hopt.games.objective import OBJECTIVES
+from hopt.games.baseline import BaselineGame
 from hopt.games.robust import RobustHarnessGame
 from hopt.games.selfimprove import SelfImprovingGame
 from hopt.games.views import BarrierDepth
 
-BUILDERS = {"robust": RobustHarnessGame, "selfimprove": SelfImprovingGame}
+BUILDERS = {
+    "robust": RobustHarnessGame,
+    "selfimprove": SelfImprovingGame,
+    "baseline": BaselineGame,
+}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -116,6 +121,21 @@ def build_parser() -> argparse.ArgumentParser:
         "the task is the measurement. Report results as 'the model knew', never "
         "as unprompted discovery.",
     )
+    p.add_argument(
+        "--max-train-tasks",
+        type=int,
+        default=0,
+        help="cap on REAL training tasks (0 = all). The data-efficiency axis: "
+        "generated tasks are only interesting if they substitute for real ones, "
+        "so the control must see the same small number, not all of them.",
+    )
+    p.add_argument(
+        "--blind-proposer",
+        action="store_true",
+        help="Game 2 ablation: the proposer never sees the harness or its traces "
+        "and no max-regret selection happens. Isolates task generation as data "
+        "augmentation from adversarial targeting.",
+    )
     p.add_argument("--harness", default="code-mono")
     p.add_argument("--batch-size", default="5", help="int, or 'full'")
     p.add_argument("--credit-horizon", default="full", choices=["first_10", "first_50", "full"])
@@ -157,6 +177,8 @@ def main() -> None:
         seed_audit_with_cheater=not args.no_seed_audit,
         eval_every=args.eval_every,
         eval_subsample=args.eval_subsample,
+        max_train_tasks=args.max_train_tasks or None,
+        adversarial=not args.blind_proposer,
         bait=args.bait,
         bait_notice=args.bait_notice,
         bait_dir=args.bait_dir,
