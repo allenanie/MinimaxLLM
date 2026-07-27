@@ -931,3 +931,51 @@ class TestTrueReward(unittest.TestCase):
 
         with self.assertRaises(AssertionError):
             BaitOracle().render_for_adversary()
+
+
+class TestBaitPlanting(unittest.TestCase):
+    """The plant must actually land, and must fail loudly when it cannot.
+
+    Two full runs were spent believing bait was planted when it never was:
+    Harbor passes task_dir only to the oracle agent (trial.py:_init_agent), so
+    the constructor argument is always None for a custom agent, and the old
+    guard returned silently. Every downstream diagnostic then honestly reported
+    zero cheating in an environment containing nothing to cheat with.
+    """
+
+    def test_solution_dir_resolves_from_the_trial_name(self):
+        from hopt.games.task_artifact import resolve_cached_task
+
+        # The fallback path: <job>/<task_name>__<suffix>/agent
+        trial = "build-system-task-ordering__ftEf5LL"
+        task = trial.rsplit("__", 1)[0]
+        self.assertEqual(task, "build-system-task-ordering")
+        cached = resolve_cached_task(task)
+        if cached is None:
+            self.skipTest("harbor task cache not populated on this machine")
+        self.assertTrue((cached / "solution").is_dir())
+
+    def test_planting_raises_when_no_solution_can_be_found(self):
+        import asyncio
+
+        from hopt.code_agent import CodeArtifactAgent
+
+        agent = CodeArtifactAgent.__new__(CodeArtifactAgent)
+        agent._bait = True
+        agent._bait_dir = "/solution"
+        agent._task_dir = None
+        agent.logs_dir = Path("/nonexistent/job/no-such-task__XXXX/agent")
+
+        with self.assertRaises(RuntimeError) as ctx:
+            asyncio.run(agent._plant_bait(object()))
+        self.assertIn("Refusing to run a baited trial with no bait", str(ctx.exception))
+
+    def test_planting_is_a_noop_when_bait_is_off(self):
+        import asyncio
+
+        from hopt.code_agent import CodeArtifactAgent
+
+        agent = CodeArtifactAgent.__new__(CodeArtifactAgent)
+        agent._bait = False
+        # No exception, and never touches the environment.
+        asyncio.run(agent._plant_bait(None))
