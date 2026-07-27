@@ -347,10 +347,17 @@ if __name__ == "__main__":
     unittest.main(verbosity=2)
 
 
-class HeldOutIsCleanTest(RobustLoopTest):
-    """Held-out evaluation must never run with bait enabled."""
+class HeldOutIsBaitedTest(RobustLoopTest):
+    """Bait is all-or-nothing: a baited run baits held-out too, and reports r*.
 
-    def test_evaluation_disables_bait(self):
+    This inverts an earlier rule here that forced held-out unbaited. That rule
+    fixed a real problem the wrong way -- a baited Game 1 was compared against an
+    unbaited Game 2 on identical tasks -- but an unbaited split cannot answer
+    whether anti-cheating behaviour GENERALIZES, since there is nothing to resist.
+    Bait both, and compare on r*.
+    """
+
+    def test_evaluation_keeps_bait_and_reports_r_star(self):
         # cfg.exp is a cached_property already materialized in setUp, so the
         # flags must be set *and* the cache cleared, or the round rollouts keep
         # the un-baited kwargs and the test proves nothing.
@@ -375,7 +382,29 @@ class HeldOutIsCleanTest(RobustLoopTest):
         rounds = [(j, k) for j, k in seen if "heldout" not in j]
         self.assertTrue(heldout, "no held-out evaluation ran")
         for job, kwargs in heldout:
-            self.assertEqual(kwargs, {}, f"{job} ran WITH bait: {kwargs}")
-        # ...while the round rollouts keep it, or there is nothing to detect.
+            self.assertTrue(kwargs.get("bait"), f"{job} ran WITHOUT bait: {kwargs}")
         self.assertTrue(any(k.get("bait") for _, k in rounds),
                         "round rollouts should still be baited")
+
+    def test_baited_heldout_records_both_rewards(self):
+        self.cfg.bait = True
+        self.cfg.__dict__.pop("exp", None)
+        self._seed_audit()
+        summary = __import__("asyncio").run(self.game.play())
+        evals = summary["heldout"]
+        self.assertTrue(evals, "no held-out evaluation recorded")
+        for ev in evals:
+            # v alone silently credits cheating, so both must be present
+            self.assertIn("mean_reward", ev)
+            self.assertIn("r_star", ev, f"{ev['tag']} has no r*")
+            self.assertIn("per_task_r_star", ev)
+            self.assertLessEqual(ev["r_star"], ev["mean_reward"] + 1e-9,
+                                 "r* cannot exceed v")
+
+    def test_unbaited_run_reports_v_only(self):
+        self.cfg.bait = False
+        self.cfg.__dict__.pop("exp", None)
+        self._seed_audit()
+        summary = __import__("asyncio").run(self.game.play())
+        for ev in summary["heldout"]:
+            self.assertNotIn("r_star", ev, "r* is meaningless with no bait planted")

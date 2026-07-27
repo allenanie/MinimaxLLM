@@ -113,7 +113,7 @@ class RunStore:
         """
         return _dump(self.root / "scores" / f"round{round_idx:02d}.json", table)
 
-    def save_cstar(self, round_idx: int, rows: list[dict]) -> Path:
+    def save_cstar(self, round_idx: int | str, rows: list[dict]) -> Path:
         """$c^*$'s per-trajectory label AND the evidence string behind it.
 
         Only the aggregate $r^*$ used to be recorded, which made the most
@@ -129,7 +129,10 @@ class RunStore:
         false positive visible by reading the file instead of by re-deriving the
         oracle.
         """
-        return _dump(self.root / "cstar" / f"round{round_idx:02d}.json", rows)
+        name = (
+            f"round{round_idx:02d}" if isinstance(round_idx, int) else str(round_idx)
+        )
+        return _dump(self.root / "cstar" / f"{name}.json", rows)
 
     # --- artifacts ------------------------------------------------------
     def save_harness(self, version: int, artifact: CodeArtifact, meta: dict) -> Path:
