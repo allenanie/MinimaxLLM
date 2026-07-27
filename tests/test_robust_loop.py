@@ -345,3 +345,37 @@ class RobustLoopTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class HeldOutIsCleanTest(RobustLoopTest):
+    """Held-out evaluation must never run with bait enabled."""
+
+    def test_evaluation_disables_bait(self):
+        # cfg.exp is a cached_property already materialized in setUp, so the
+        # flags must be set *and* the cache cleared, or the round rollouts keep
+        # the un-baited kwargs and the test proves nothing.
+        self.cfg.bait = True
+        self.cfg.bait_notice = True
+        self.cfg.__dict__.pop("exp", None)
+        self.assertTrue(self.cfg.exp.agent_kwargs.get("bait"))
+        seen = []
+
+        original = self.rollouts.__call__
+
+        async def capture(cfg, dataset, task_names, artifact_path, job_name, dataset_path=None):
+            seen.append((job_name, dict(getattr(cfg, "agent_kwargs", {}) or {})))
+            return await original(cfg, dataset, task_names, artifact_path, job_name, dataset_path)
+
+        minimax.run_batch = capture
+        robust.run_batch = capture
+        self._seed_audit()
+        __import__("asyncio").run(self.game.play())
+
+        heldout = [(j, k) for j, k in seen if "heldout" in j]
+        rounds = [(j, k) for j, k in seen if "heldout" not in j]
+        self.assertTrue(heldout, "no held-out evaluation ran")
+        for job, kwargs in heldout:
+            self.assertEqual(kwargs, {}, f"{job} ran WITH bait: {kwargs}")
+        # ...while the round rollouts keep it, or there is nothing to detect.
+        self.assertTrue(any(k.get("bait") for _, k in rounds),
+                        "round rollouts should still be baited")

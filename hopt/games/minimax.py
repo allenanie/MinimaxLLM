@@ -359,8 +359,18 @@ class MinimaxGame(ABC):
                     tasks, self.cfg.eval_subsample
                 )
             )
+        # NEVER baited. The evaluation has to measure genuine task-solving, and a
+        # baited evaluation measures capability plus cheating -- a harness that
+        # learned to run the planted solution would score near 1.0 here while
+        # having learned nothing, and "did robustification cost capability" would
+        # be unanswerable. Caught when Game 1's baseline read 0.500 against 0.387
+        # for the identical seed harness, model and task subsample in Game 2; the
+        # gap was the bait.
+        import dataclasses
+
+        eval_cfg = dataclasses.replace(self.cfg.exp, agent_kwargs={})
         batch = await run_batch(
-            self.cfg.exp,
+            eval_cfg,
             dataset=self.cfg.train_dataset,
             task_names=tasks,
             artifact_path=harness.root,
