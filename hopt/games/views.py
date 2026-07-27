@@ -92,30 +92,82 @@ def _normalize(text: str) -> list[str]:
     return re.sub(r"\s+", " ", text).strip().lower().split(" ")
 
 
-def assert_no_leak(prompt: str, secrets: list[str], *, label: str = "harness prompt") -> None:
-    """Fail if any secret text appears verbatim in ``prompt``.
+def find_leaks(
+    prompt: str, secrets: list[str], allowed: list[str] | None = None
+) -> list[str]:
+    """Return the secret fragments that appear verbatim in ``prompt``.
 
-    ``secrets`` are the adversary's artifact files -- detector source, judge
-    rubric, or a task's ``tests/test.sh``. Audit notes are deliberately not
-    secrets and must never be passed here.
+    ``allowed`` is text the barrier deliberately permits even though it also
+    occurs inside a secret. Two cases make this necessary rather than a nicety,
+    and both were found the hard way by crashed runs:
+
+    * A **code detector's audit note is a string literal in its own source.** The
+      note is the sanctioned channel, so matching it against the source flags the
+      exact thing the design intends to send.
+    * A **harness that solves a task writes code resembling the gold solution.**
+      That is the harness succeeding, not leaking.
     """
     haystack = " ".join(_normalize(prompt))
+    permitted = [" ".join(_normalize(a)) for a in (allowed or [])]
+    hits: list[str] = []
+
+    def _sanctioned(fragment: str) -> bool:
+        return any(fragment in text for text in permitted)
+
     for secret in secrets:
         words = _normalize(secret)
         if len(words) < SHINGLE_WORDS:
             probe = " ".join(words)
-            if len(probe) >= MIN_SECRET_CHARS and probe in haystack:
-                raise LeakError(
-                    f"{label} contains the adversary's artifact verbatim: {probe[:120]!r}"
-                )
+            if len(probe) >= MIN_SECRET_CHARS and probe in haystack and not _sanctioned(probe):
+                hits.append(probe)
             continue
         for i in range(len(words) - SHINGLE_WORDS + 1):
             shingle = " ".join(words[i : i + SHINGLE_WORDS])
-            if shingle in haystack:
-                raise LeakError(
-                    f"{label} contains {SHINGLE_WORDS} consecutive words from the "
-                    f"adversary's artifact: {shingle[:160]!r}"
-                )
+            if shingle in haystack and not _sanctioned(shingle):
+                hits.append(shingle)
+                break  # one report per secret is enough to act on
+    return hits
+
+
+def redact(prompt: str, fragments: list[str]) -> str:
+    """Remove leaked fragments from a prompt instead of discarding the prompt.
+
+    Matching is whitespace-normalized, so the fragment usually is not a literal
+    substring of the original text. Redaction therefore works line by line: any
+    line whose normalized form contains a flagged fragment is replaced.
+    """
+    if not fragments:
+        return prompt
+    out = []
+    for line in prompt.splitlines():
+        norm = " ".join(_normalize(line))
+        if any(f in norm for f in fragments):
+            out.append("[redacted: withheld from this player by the information barrier]")
+        else:
+            out.append(line)
+    return "\n".join(out)
+
+
+def assert_no_leak(
+    prompt: str,
+    secrets: list[str],
+    *,
+    label: str = "harness prompt",
+    allowed: list[str] | None = None,
+) -> None:
+    """Strict form: raise on any leak. Used by tests.
+
+    The live game does **not** use this. A tripwire that aborts the process
+    destroys the experiment it is protecting -- a false positive in round 12 of a
+    15-round run cost exactly that -- so the runtime path redacts and records
+    instead. See ``_PromptHook`` in hopt/games/players.py.
+    """
+    hits = find_leaks(prompt, secrets, allowed)
+    if hits:
+        raise LeakError(
+            f"{label} contains {len(hits)} fragment(s) from the adversary's "
+            f"artifact: {hits[0][:160]!r}"
+        )
 
 
 @dataclass(frozen=True)

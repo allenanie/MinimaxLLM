@@ -229,17 +229,19 @@ class SelfImprovingGame(MinimaxGame):
         return self._adversary
 
     def adversary_secrets(self) -> list[str]:
-        """Every admitted task's verifier and reference solution.
+        """Every admitted task's verifier. The Game 2 barrier is *how it is graded*.
 
-        Not the instruction: the harness is supposed to read that. This is the
-        Game 2 barrier -- hide how the task is checked, not what it asks for.
+        Not the instruction -- the harness is supposed to read that. And
+        deliberately **not** ``solution/solve.sh``: a harness that solves the task
+        writes code resembling the gold solution, because there are only so many
+        ways to compute a CRC. Treating the gold solution as secret flags the
+        harness for succeeding, which cost a full run before it was caught.
         """
         secrets: list[str] = []
         for task in sorted(self.pool_dir.glob("*")):
-            for name in ("tests/test.sh", "solution/solve.sh"):
-                path = task / name
-                if path.exists():
-                    secrets.append(path.read_text(errors="replace"))
+            path = task / "tests" / "test.sh"
+            if path.exists():
+                secrets.append(path.read_text(errors="replace"))
         return secrets
 
     def seed_adversary_artifact(self) -> TaskArtifact:

@@ -262,6 +262,23 @@ class RunStore:
             self.root / "llm" / f"r{round_idx:02d}_{player}{suffix}_step.json", payload
         )
 
+    def save_leak_incident(self, incident: dict) -> Path:
+        """Append a barrier redaction to the run's incident log.
+
+        Redactions are silent by design at runtime -- the run continues -- so they
+        have to be loud in the record, or a barrier that fired every round would
+        look identical to one that never did.
+        """
+        path = self.root / "leak_incidents.json"
+        existing: list = []
+        if path.exists():
+            try:
+                existing = json.loads(path.read_text())
+            except json.JSONDecodeError:
+                existing = []
+        existing.append(incident)
+        return _dump(path, existing)
+
     def save_text(self, relpath: str, text: str) -> Path:
         path = self.root / relpath
         path.parent.mkdir(parents=True, exist_ok=True)

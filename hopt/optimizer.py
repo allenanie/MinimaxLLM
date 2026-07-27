@@ -122,7 +122,7 @@ class ArtifactOptimizer:
         model: str,
         api_key: str | None = None,
         max_tokens: int = 64000,
-        prompt_guard: Callable[[str], None] | None = None,
+        prompt_guard: Callable[[str], str | None] | None = None,
     ):
         # Provider comes from a "provider/model" prefix; a bare name is Anthropic,
         # so existing configs are unchanged. See hopt/llm.py for why this is not
@@ -146,7 +146,9 @@ class ArtifactOptimizer:
         the retry ladder below can branch on one set of names.
         """
         if self.prompt_guard is not None:
-            self.prompt_guard(user)
+            # A guard may return a replacement prompt (the games redact rather
+            # than abort); None means "send it unchanged".
+            user = self.prompt_guard(user) or user
         return self.client.message(system, user, max_tokens or self.max_tokens)
 
     def _count_input_tokens(self, system: str, user: str) -> int | None:

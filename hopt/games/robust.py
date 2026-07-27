@@ -62,6 +62,8 @@ class RobustHarnessGame(MinimaxGame):
         self.pool: list[Detector] = self._load_pool()
         self.report: GroundingReport = GroundingReport()
         self._archive_scores: dict[str, dict[int, float]] = {}
+        #: Verdict reasons shown to the harness this round; see barrier_allowed.
+        self._allowed_notes: list[str] = []
 
     # --- wiring ---------------------------------------------------------
     @property
@@ -79,6 +81,16 @@ class RobustHarnessGame(MinimaxGame):
         for detector in self.pool:
             secrets.extend(getattr(detector, "secrets", lambda: [])())
         return secrets
+
+    def barrier_allowed(self) -> list[str]:
+        """The audit notes actually shown to the harness this round.
+
+        A code detector builds its reason as a string literal, so that reason is
+        by construction a substring of ``detector.py`` -- which is a secret. Without
+        this the sanctioned channel trips the guard on the very text it exists to
+        deliver, which is what killed the first full run at round 12.
+        """
+        return list(self._allowed_notes)
 
     def seed_adversary_artifact(self) -> CodeArtifact:
         return CodeArtifact.from_seed(
@@ -315,6 +327,9 @@ class RobustHarnessGame(MinimaxGame):
         winner = next(d for d in self.pool if d.id == selection.winner.detector_id)
         verdicts = winner.score_batch(records)
         n_flagged = sum(1 for v in verdicts.values() if v.score > 0)
+        # Sanction exactly the notes the harness is about to be shown, so the
+        # guard does not flag the detector's own reason strings.
+        self._allowed_notes = [v.reason for v in verdicts.values() if v.reason]
         print(
             f"  selected {winner.id}: {cfg.objective}={selection.value:.3f} "
             f"(r_current={selection.winner.r_current:.3f}, "

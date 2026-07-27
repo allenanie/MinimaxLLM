@@ -31,7 +31,7 @@ from hopt.artifact import (
 )
 from hopt.optimizer import CODE_SYSTEM_PROMPT, CodeArtifactOptimizer, CodeOptimizerStep
 from hopt.games.store import RunStore
-from hopt.games.views import MaximizerView, MinimizerView, assert_no_leak
+from hopt.games.views import MaximizerView, MinimizerView, find_leaks, redact
 
 # ---------------------------------------------------------------------------
 # System prompts. One per player; the shared contract text is appended by the
@@ -169,26 +169,68 @@ class _PromptHook:
         store: RunStore,
         player: str,
         secrets: Callable[[], list[str]] | None = None,
+        allowed: Callable[[], list[str]] | None = None,
     ):
         self.store = store
         self.player = player
         self.secrets = secrets
+        #: Text the barrier permits even though it also occurs in a secret --
+        #: audit notes, chiefly. See views.find_leaks.
+        self.allowed = allowed
         self.round_idx = 0
         self.attempt = 0
         self.tag = ""
+        self.incidents: list[dict] = []
 
     def begin(self, round_idx: int, tag: str = "") -> None:
         self.round_idx = round_idx
         self.attempt = 0
         self.tag = tag
 
-    def __call__(self, prompt: str) -> None:
+    def __call__(self, prompt: str) -> str:
+        """Record the prompt, then redact anything the barrier forbids.
+
+        Returns the prompt to actually send. Redacting rather than raising is a
+        correctness decision, not leniency: the barrier's job is to keep secret
+        text out of this request, and removing the text does that. Aborting the
+        process does it too, but also destroys a multi-hour run -- which is what
+        happened when a detector's own audit note matched its source.
+
+        Every incident is written to the run store, so a redaction is visible in
+        review rather than silently swallowed.
+        """
         self.attempt += 1
         self.store.save_prompt(
             self.round_idx, self.player, self.attempt, prompt, self.tag
         )
-        if self.secrets is not None:
-            assert_no_leak(prompt, self.secrets(), label=f"{self.player} prompt")
+        if self.secrets is None:
+            return prompt
+
+        hits = find_leaks(
+            prompt, self.secrets(), self.allowed() if self.allowed else None
+        )
+        if not hits:
+            return prompt
+
+        incident = {
+            "round": self.round_idx,
+            "player": self.player,
+            "tag": self.tag,
+            "attempt": self.attempt,
+            "n_fragments": len(hits),
+            "fragments": [h[:300] for h in hits],
+        }
+        self.incidents.append(incident)
+        self.store.save_leak_incident(incident)
+        print(
+            f"  [barrier] redacted {len(hits)} fragment(s) from the {self.player} "
+            f"prompt: {hits[0][:80]!r}"
+        )
+        cleaned = redact(prompt, hits)
+        self.store.save_prompt(
+            self.round_idx, self.player, self.attempt, cleaned, f"{self.tag}_redacted"
+        )
+        return cleaned
 
 
 class Player(ABC):
@@ -207,6 +249,7 @@ class Player(ABC):
         artifact_label: str,
         task_instruction: str,
         secrets: Callable[[], list[str]] | None = None,
+        allowed: Callable[[], list[str]] | None = None,
         artifact_cls: Any = None,
     ):
         from hopt.artifact import CodeArtifact
@@ -214,7 +257,7 @@ class Player(ABC):
         self.name = name
         self.spec = spec
         self.store = store
-        self.hook = _PromptHook(store, name, secrets)
+        self.hook = _PromptHook(store, name, secrets, allowed)
         self.optimizer = CodeArtifactOptimizer(
             model=model,
             spec=spec,
@@ -262,6 +305,7 @@ class HarnessPlayer(Player):
         store: RunStore,
         spec: EntrypointSpec = RUN_AGENT_SPEC,
         secrets: Callable[[], list[str]] | None = None,
+        allowed: Callable[[], list[str]] | None = None,
     ):
         super().__init__(
             model=model,
@@ -276,6 +320,7 @@ class HarnessPlayer(Player):
                 "needs, each in its own <file> block."
             ),
             secrets=secrets,
+            allowed=allowed,
         )
 
     def propose(

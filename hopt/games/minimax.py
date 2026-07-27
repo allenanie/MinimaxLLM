@@ -59,6 +59,7 @@ class MinimaxGame(ABC):
             store=self.store,
             spec=cfg.exp.entrypoint_spec,
             secrets=self.adversary_secrets,
+            allowed=self.barrier_allowed,
         )
 
     # --- game-specific hooks -------------------------------------------
@@ -69,6 +70,15 @@ class MinimaxGame(ABC):
     @abstractmethod
     def adversary_secrets(self) -> list[str]:
         """Text the harness optimizer must never see, for the leak guard."""
+
+    def barrier_allowed(self) -> list[str]:
+        """Text the barrier permits even though it also occurs inside a secret.
+
+        Default: nothing. Game 1 overrides it with the audit notes actually shown
+        this round, because a code detector's reason is a string literal in its
+        own source and would otherwise be flagged as its own leak.
+        """
+        return []
 
     @abstractmethod
     def seed_adversary_artifact(self) -> Any:
