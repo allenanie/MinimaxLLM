@@ -239,6 +239,11 @@ def review_rounds(root: Path, out: list[str]) -> None:
             f"penalized={record.get('penalized_mean_reward', 0):.3f} "
             f"flagged={record.get('n_flagged', 0)}"
         )
+        if record.get("r_star_current") is not None:
+            line += f" | r*={record['r_star_current']:.3f}"
+        if record.get("bait"):
+            b = record["bait"]
+            line += f" bait(saw/ran/won)={b.get('touched')}/{b.get('acted')}/{b.get('exploited')}"
         if record.get("selected_detector"):
             line += (
                 f" | d*={record['selected_detector']} "

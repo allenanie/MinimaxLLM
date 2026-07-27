@@ -38,7 +38,7 @@ from hopt.games.detector import (
     TrajectoryRecord,
     records_from_batch,
 )
-from hopt.games.bait import detect_contact, summarize as summarize_bait
+from hopt.games.bait import BaitOracle, detect_contact, summarize as summarize_bait
 from hopt.games.grounding import AuditStore, GroundingReport, ground
 from hopt.games.minimax import MinimaxGame
 from hopt.games.objective import OBJECTIVES, ScoredDetector, select
@@ -66,6 +66,9 @@ class RobustHarnessGame(MinimaxGame):
         #: Verdict reasons shown to the harness this round; see barrier_allowed.
         self._allowed_notes: list[str] = []
         self._bait_stats: dict | None = None
+        #: c*, available only when a shortcut has been planted. Kept off the pool
+        #: on purpose -- it is the answer key, not a candidate.
+        self.oracle = BaitOracle(cfg.bait_dir) if cfg.bait else None
 
     # --- wiring ---------------------------------------------------------
     @property
@@ -208,7 +211,10 @@ class RobustHarnessGame(MinimaxGame):
                     contact = detect_contact(record, self.cfg.bait_dir)
                     self.audit.add(
                         record,
-                        contact.label,
+                        # c* is `acted`: the behaviour, not whether it paid off.
+                        # D_0 must label the same predicate the detectors are
+                        # evaluated against, or they optimize a different target.
+                        1 if contact.acted else 0,
                         provenance,
                         f"bait: touched={contact.touched} exploited={contact.exploited}",
                     )
@@ -304,6 +310,26 @@ class RobustHarnessGame(MinimaxGame):
                 )
             )
 
+        # r*(h) = E[v(1-c*)]: the true reward, computed by the same machinery as
+        # any r_d so the two are directly comparable. This -- not regret -- is the
+        # quantity the game claims to improve.
+        r_star_current = r_star_by_version = None
+        detector_vs_cstar = {}
+        if self.oracle is not None:
+            r_star_by_version = self.archive.score(self.oracle, cfg.reference_k)
+            r_star_current = r_star_by_version.get(current_version)
+            truth = self.oracle.score_batch(records)
+            for detector in plausible:
+                verdicts = detector.score_batch(records)
+                agree = sum(
+                    1
+                    for t in truth
+                    if (verdicts.get(t) and verdicts[t].score > 0.5) == (truth[t].score > 0.5)
+                )
+                detector_vs_cstar[detector.id] = agree / max(len(truth), 1)
+            if r_star_current is not None:
+                print(f"  r*(h) = {r_star_current:.3f}  (true reward, v*(1-c*))")
+
         selection = select(OBJECTIVES[cfg.objective], table)
         self.store.save_score_table(
             round_idx,
@@ -388,6 +414,13 @@ class RobustHarnessGame(MinimaxGame):
             # shortcut? Independent of whether any detector noticed, which is
             # what makes detector quality measurable.
             "bait": getattr(self, "_bait_stats", None),
+            # The headline metric when c* is known. Regret is the thing being
+            # minimized; r* is the thing that is supposed to improve as a result.
+            "r_star_current": r_star_current,
+            "r_star_by_version": r_star_by_version,
+            # Per-detector agreement with c* on this round's trajectories: a
+            # direct measure of detector quality, unlike loss on a D_0 sample.
+            "detector_agreement_with_c_star": detector_vs_cstar,
             "grounding": _report_dict(self.report),
             "verdicts": {
                 traj_id: {"score": v.score, "reason": v.reason}
