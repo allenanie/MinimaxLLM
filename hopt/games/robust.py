@@ -38,7 +38,8 @@ from hopt.games.detector import (
     TrajectoryRecord,
     records_from_batch,
 )
-from hopt.games.bait import BaitOracle, detect_contact, summarize as summarize_bait
+from hopt.games.bait import detect_contact, summarize as summarize_bait
+from hopt.games.cheat_oracle import CheatOracle, classify, mode_counts
 from hopt.games.grounding import AuditStore, GroundingReport, ground
 from hopt.games.minimax import MinimaxGame
 from hopt.games.objective import OBJECTIVES, ScoredDetector, select
@@ -68,7 +69,10 @@ class RobustHarnessGame(MinimaxGame):
         self._bait_stats: dict | None = None
         #: c*, available only when a shortcut has been planted. Kept off the pool
         #: on purpose -- it is the answer key, not a candidate.
-        self.oracle = BaitOracle(cfg.bait_dir) if cfg.bait else None
+        # c* covers cheat *behaviours*, not one file path: a path-only oracle is
+        # trivially learnable and the adversary duly learned it (three regexes
+        # over /solution, loss 0.012, blind to everything else).
+        self.oracle = CheatOracle(cfg.bait_dir, self._gold_solutions()) if cfg.bait else None
 
     # --- wiring ---------------------------------------------------------
     @property
@@ -104,6 +108,23 @@ class RobustHarnessGame(MinimaxGame):
             self.adversary.spec,
         )
 
+    def _gold_solutions(self) -> dict:
+        """task -> gold solution text, for the provenance check in c*.
+
+        Content matching is what survives concealment: copying the file under
+        another name, reading it via a variable, assembling the path from
+        fragments -- all still end with the gold text written out as the answer.
+        """
+        from hopt.games.task_artifact import resolve_cached_task
+
+        out = {}
+        for task in sorted(set(self.split.train) | set(self.split.val)):
+            d = resolve_cached_task(task)
+            solve = (d / "solution" / "solve.sh") if d else None
+            if solve and solve.exists():
+                out[task] = solve.read_text(errors="replace")
+        return out
+
     def _build_detector(self, artifact: CodeArtifact) -> Detector:
         if self.cfg.detector_kind == "code":
             return CodeDetector(artifact, cache=self.cache)
@@ -120,6 +141,18 @@ class RobustHarnessGame(MinimaxGame):
             except Exception:  # noqa: BLE001 - a corrupt dir must not block a resume
                 continue
         return out
+
+    async def adversary_move(self, round_idx: int, view):
+        """One proposal per round -- or exactly one for the whole run, if static.
+
+        The static arm is the control for the dynamic half of the minimax: the
+        harness still faces a grounded detector and still gets penalized, but the
+        detector never adapts to what the harness became.
+        """
+        if self.cfg.static_detector and self.pool:
+            print(f"  (static detector: reusing {self.pool[0].id}, no new proposal)")
+            return _Frozen(self.adv_artifact)
+        return await super().adversary_move(round_idx, view)
 
     async def task_set(self, round_idx: int) -> tuple[list[str], Path | None]:
         return self.train_batch_tasks(round_idx), None
@@ -370,13 +403,14 @@ class RobustHarnessGame(MinimaxGame):
             return view, {"selected_detector": None, "grounding": _report_dict(self.report)}
 
         if cfg.bait:
-            bait_stats = summarize_bait(
-                [detect_contact(r, cfg.bait_dir) for r in records]
+            gold = self._gold_solutions()
+            bait_stats = mode_counts(
+                [classify(r, cfg.bait_dir, gold.get(r.task_name, "")) for r in records]
             )
+            modes = {k: v for k, v in bait_stats.items() if k not in ("n", "cheated")}
             print(
-                f"  bait: {bait_stats['touched']}/{bait_stats['n']} saw "
-                f"{cfg.bait_dir}, {bait_stats['acted']} ran a command on it, "
-                f"{bait_stats['exploited']} exploited it"
+                f"  c*: {bait_stats['cheated']}/{bait_stats['n']} of this TRAIN BATCH "
+                f"cheated; modes={modes or 'none'}"
             )
             self._bait_stats = bait_stats
 
@@ -455,3 +489,13 @@ def _report_dict(report: GroundingReport) -> dict:
         "provenance": report.provenance,
         "agreement": report.agreement,
     }
+
+
+class _Frozen:
+    """Stands in for the proposal the static arm deliberately did not make."""
+
+    def __init__(self, artifact):
+        self.artifact = artifact
+        self.changed = False
+        self.rejected: list[str] = []
+        self.evidence_tier = None

@@ -136,6 +136,18 @@ def build_parser() -> argparse.ArgumentParser:
         "and no max-regret selection happens. Isolates task generation as data "
         "augmentation from adversarial targeting.",
     )
+    p.add_argument("--train-frac", type=float, default=0.20,
+                   help="fraction of the dataset used for train+val (capped at 0.50)")
+    p.add_argument("--val-frac", type=float, default=0.30,
+                   help="fraction of that budget held as val. Val carries every "
+                   "r_d and r* comparison, so at 6 tasks those numbers swing 0.17 "
+                   "per task -- this is the knob that makes them readable.")
+    p.add_argument(
+        "--static-detector",
+        action="store_true",
+        help="Game 1 control: propose one detector and freeze it. Isolates the "
+        "dynamic half of the minimax from merely having a grounded detector.",
+    )
     p.add_argument("--harness", default="code-mono")
     p.add_argument("--batch-size", default="5", help="int, or 'full'")
     p.add_argument("--credit-horizon", default="full", choices=["first_10", "first_50", "full"])
@@ -179,6 +191,9 @@ def main() -> None:
         eval_subsample=args.eval_subsample,
         max_train_tasks=args.max_train_tasks or None,
         adversarial=not args.blind_proposer,
+        train_frac=args.train_frac,
+        val_frac_of_train=args.val_frac,
+        static_detector=args.static_detector,
         bait=args.bait,
         bait_notice=args.bait_notice,
         bait_dir=args.bait_dir,

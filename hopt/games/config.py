@@ -117,6 +117,12 @@ class GameConfig:
     #: Cap on held-out tasks per evaluation, sampled deterministically so every
     #: evaluation in a run scores the same tasks and the series is comparable.
     eval_subsample: int = 20
+    #: Game 1 control: propose ONE detector and freeze it, instead of proposing
+    #: a fresh one each round. The analogue of Game 2's blind-proposer arm --
+    #: it isolates the *dynamic* half of the minimax. If a harness optimized
+    #: against a single static detector ends up as robust as one facing an
+    #: adapting adversary, the alternation is decoration.
+    static_detector: bool = False
     #: Detector representation (Game 1 only).
     detector_kind: str = "code"
     #: How much of the detector's output reaches the harness optimizer.
