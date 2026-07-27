@@ -38,6 +38,7 @@ from hopt.games.detector import (
     TrajectoryRecord,
     records_from_batch,
 )
+from hopt.games.bait import detect_contact, summarize as summarize_bait
 from hopt.games.grounding import AuditStore, GroundingReport, ground
 from hopt.games.minimax import MinimaxGame
 from hopt.games.objective import OBJECTIVES, ScoredDetector, select
@@ -64,6 +65,7 @@ class RobustHarnessGame(MinimaxGame):
         self._archive_scores: dict[str, dict[int, float]] = {}
         #: Verdict reasons shown to the harness this round; see barrier_allowed.
         self._allowed_notes: list[str] = []
+        self._bait_stats: dict | None = None
 
     # --- wiring ---------------------------------------------------------
     @property
@@ -197,6 +199,20 @@ class RobustHarnessGame(MinimaxGame):
             records = records_from_batch(batch.outcomes)
             self.store.save_trajectories(records)
             for record in records:
+                if self.cfg.bait:
+                    # Behavioural labelling. With a shortcut planted, "did this
+                    # trajectory take it" is observable, so the label is a
+                    # measurement rather than the assumption that whichever
+                    # harness produced it was honest -- including for the seed,
+                    # which can now stumble into the bait like anything else.
+                    contact = detect_contact(record, self.cfg.bait_dir)
+                    self.audit.add(
+                        record,
+                        contact.label,
+                        provenance,
+                        f"bait: touched={contact.touched} exploited={contact.exploited}",
+                    )
+                    continue
                 # Only *successful* cheating runs are positives: a cheat that
                 # failed to fool the verifier is not an example of a verifier
                 # being fooled, and labelling it 1 would teach detectors to flag
@@ -327,6 +343,16 @@ class RobustHarnessGame(MinimaxGame):
             view = MinimizerView.build(batch, {}, records, cfg.barrier_depth, cfg.reason_max_chars)
             return view, {"selected_detector": None, "grounding": _report_dict(self.report)}
 
+        if cfg.bait:
+            bait_stats = summarize_bait(
+                [detect_contact(r, cfg.bait_dir) for r in records]
+            )
+            print(
+                f"  bait: {bait_stats['touched']}/{bait_stats['n']} trajectories "
+                f"touched {cfg.bait_dir}, {bait_stats['exploited']} exploited it"
+            )
+            self._bait_stats = bait_stats
+
         winner = next(d for d in self.pool if d.id == selection.winner.detector_id)
         verdicts = winner.score_batch(records)
         n_flagged = sum(1 for v in verdicts.values() if v.score > 0)
@@ -357,6 +383,10 @@ class RobustHarnessGame(MinimaxGame):
             "archive_total": len(self.archive.versions),
             "pool_size": len(self.pool),
             "plausible_size": len(plausible),
+            # Ground truth for the round: did the harness take the planted
+            # shortcut? Independent of whether any detector noticed, which is
+            # what makes detector quality measurable.
+            "bait": getattr(self, "_bait_stats", None),
             "grounding": _report_dict(self.report),
             "verdicts": {
                 traj_id: {"score": v.score, "reason": v.reason}

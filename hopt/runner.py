@@ -83,6 +83,7 @@ def build_job_config(
                 cfg.harness_spec,
                 model_name=cfg.model_name,
                 artifact_path=artifact_path,
+                agent_kwargs=getattr(cfg, "agent_kwargs", None),
                 setup_timeout_sec=(
                     cfg.setup_timeout_sec
                     if cfg.harness_spec.get("is_directory")

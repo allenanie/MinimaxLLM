@@ -147,6 +147,10 @@ class ExperimentConfig:
     # enough. Only applied to directory-of-code harnesses.
     setup_timeout_sec: int = 900
 
+    # Extra kwargs handed to the Harbor agent. Used by the games to enable bait;
+    # empty for the ablation grid, so its behaviour is unchanged.
+    agent_kwargs: dict = field(default_factory=dict)
+
     # --- loop -----------------------------------------------------------
     n_iterations: int = 10
     seed: int = 0

@@ -84,11 +84,19 @@ def agent_config_entry(
     artifact_path: Path,
     n_concurrent: int | None = None,
     setup_timeout_sec: int | None = None,
+    agent_kwargs: dict[str, Any] | None = None,
 ) -> dict:
-    """Build the Harbor ``AgentConfig`` dict for a harness + current artifact."""
+    """Build the Harbor ``AgentConfig`` dict for a harness + current artifact.
+
+    ``agent_kwargs`` passes harness-specific options straight through -- the
+    Robust Harness Game uses it to turn on bait.
+    """
     entry: dict[str, Any] = {
         "model_name": model_name,
-        "kwargs": {"prompt_template_path": str(artifact_path.resolve())},
+        "kwargs": {
+            "prompt_template_path": str(artifact_path.resolve()),
+            **(agent_kwargs or {}),
+        },
         # Forwarded explicitly: the agent runs inside the sandbox and cannot see
         # the host shell profile, so an unset key fails deep inside the trial.
         "env": agent_env_for_model(model_name),
