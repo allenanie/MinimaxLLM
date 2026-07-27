@@ -328,3 +328,21 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# --- measurement noise ------------------------------------------------------
+# Six independent held-out evaluations of the IDENTICAL seed harness, same model,
+# same 20 tasks, all unbaited, differing only in agent sampling:
+#
+#     0.350  0.387  0.434  0.590  0.584  0.341     mean 0.448   sd 0.113
+#
+# So at n=20 the metric's own standard deviation is 0.113 and 2 sd is 0.23 --
+# larger than most effects this suite can produce. Any single-run arm-to-arm gap
+# below that is indistinguishable from resampling.
+#
+# Consequences, learned the hard way after reporting a within-noise result as a
+# finding: quote a delta only against a measured floor, prefer the full 80-task
+# split (sd ~ 0.056), and treat one run per arm as a pilot rather than a result.
+SEED_BASELINE_SAMPLES = (0.350, 0.387, 0.434, 0.590, 0.584, 0.341)
+SEED_BASELINE_MEAN = 0.448
+SEED_BASELINE_SD = 0.113
