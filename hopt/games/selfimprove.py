@@ -393,10 +393,11 @@ class SelfImprovingGame(MinimaxGame):
         if not batch.outcomes:
             return False, "no trial ran; the task directory was skipped as invalid", None, job_dir
         best = max(o.reward for o in batch.outcomes)
-        if best < 1.0:
+        if best < self.cfg.gate_min_reward:
             return (
                 False,
-                f"reference solution scored {best:.2f}, expected 1.0 -- either "
+                f"reference solution scored {best:.2f}, need "
+                f"{self.cfg.gate_min_reward:.2f} -- either "
                 "solve.sh does not solve the task or test.sh does not recognise it."
                 + _failure_detail(job_dir),
                 best,
@@ -486,8 +487,13 @@ class SelfImprovingGame(MinimaxGame):
                 if reward is None:
                     continue
                 candidate.harness_reward = reward
-                # Ground truth: the gate just proved a solution exists.
-                candidate.regret_oracle = 1.0 - reward
+                # The gate measured what the gold solution actually achieves, so
+                # use that rather than assuming 1.0. Identical when the threshold
+                # is 1.0; strictly more honest below it.
+                ceiling = candidate.oracle_reward
+                if ceiling is None:
+                    ceiling = 1.0
+                candidate.regret_oracle = max(0.0, ceiling - reward)
                 # Empirical: read best_seen BEFORE this round's rewards are folded
                 # in, or a brand-new task's own reward becomes its own reference
                 # and every empirical regret is trivially 0.

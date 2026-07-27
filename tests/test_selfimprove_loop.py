@@ -436,3 +436,33 @@ class Game2BarrierTest(SelfImproveLoopTest):
         self.assertEqual(self.game.adversary_secrets(), [])
         self.assertEqual(self.game.harness_player.hook.incidents, [])
         self.assertFalse((self.cfg.run_dir / "leak_incidents.json").exists())
+
+
+class RelaxedGateTest(SelfImproveLoopTest):
+    """A gate demanding exactly 1.0 appears to cap generated-task difficulty."""
+
+    def test_default_threshold_still_requires_a_perfect_gold_solution(self):
+        self.assertEqual(self.cfg.gate_min_reward, 1.0)
+        self.gate_results[1] = (0.92, False)
+        summary = asyncio.run(self.game.play())
+        rejected = [c for c in summary["rounds"][0]["candidates"] if not c["admitted"]]
+        self.assertEqual(len(rejected), 1)
+        self.assertIn("scored 0.92", rejected[0]["reason"])
+
+    def test_relaxed_threshold_admits_it_and_uses_the_measured_score(self):
+        self.cfg.gate_min_reward = 0.9
+        self.gate_results[1] = (0.92, True)
+        self.harness_rewards["t01_1"] = 0.5
+        summary = asyncio.run(self.game.play())
+        by_id = {c["task_id"]: c for c in summary["rounds"][0]["candidates"]}
+        self.assertTrue(by_id["t01_1"]["admitted"])
+        # regret against the MEASURED 0.92, not an assumed 1.0
+        self.assertAlmostEqual(by_id["t01_1"]["regret_oracle"], 0.92 - 0.5, places=3)
+
+    def test_regret_never_goes_negative(self):
+        self.cfg.gate_min_reward = 0.8
+        self.gate_results[0] = (0.85, True)
+        self.harness_rewards["t01_0"] = 1.0        # harness beats the gold solution
+        summary = asyncio.run(self.game.play())
+        by_id = {c["task_id"]: c for c in summary["rounds"][0]["candidates"]}
+        self.assertGreaterEqual(by_id["t01_0"]["regret_oracle"], 0.0)

@@ -156,6 +156,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Game 1 control: propose one detector and freeze it. Isolates the "
         "dynamic half of the minimax from merely having a grounded detector.",
     )
+    p.add_argument(
+        "--gate-min-reward", type=float, default=1.0,
+        help="minimum gold-solution score to admit a task. 1.0 appears to cap "
+        "difficulty: on ARC both proposers made tasks the harness aced while it "
+        "solved 0.07 of the real benchmark, and one candidate was rejected at "
+        "0.92. Below 1.0 the measured gold score becomes r(h*_x).",
+    )
     p.add_argument("--harness", default="code-mono")
     p.add_argument("--batch-size", default="5", help="int, or 'full'")
     p.add_argument("--credit-horizon", default="full", choices=["first_10", "first_50", "full"])
@@ -199,6 +206,7 @@ def main() -> None:
         eval_subsample=args.eval_subsample,
         max_train_tasks=args.max_train_tasks or None,
         adversarial=not args.blind_proposer,
+        gate_min_reward=args.gate_min_reward,
         train_dataset=args.dataset,
         train_frac=args.train_frac,
         val_frac_of_train=args.val_frac,

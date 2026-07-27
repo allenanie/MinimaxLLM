@@ -76,6 +76,21 @@ class GameConfig:
     #: 2's result cannot distinguish "adversarial targeting works" from
     #: "generated tasks are useful training data".
     adversarial: bool = True
+    #: Minimum gold-solution score for a task to be admitted.
+    #:
+    #: 1.0 was the original, and the evidence says it caps difficulty. On ARC both
+    #: proposers generated tasks the harness aced (0.68-0.80) while it solved 0.07
+    #: of the real benchmark -- a +0.5 to +0.73 difficulty gap -- and the
+    #: adversarial arm, which rejected more candidates, produced the EASIER tasks.
+    #: That is the signature of the gate binding rather than the objective: a task
+    #: intricate enough to defeat an agent is also intricate enough that its gold
+    #: solution rarely scores exactly 1.0. One blind candidate was rejected at
+    #: 0.92.
+    #:
+    #: Below 1.0, the measured gold score becomes r(h*_x) instead of the assumed
+    #: 1.0 -- which is also strictly more honest, since it replaces the
+    #: expressiveness assumption with a measurement.
+    gate_min_reward: float = 1.0
     #: Rounds a pool task may go with no harness scoring above zero before it is
     #: flagged as suspected agent-impossible. Such a task maximizes the oracle
     #: score forever without measuring anything, so the proposer is told about it.
