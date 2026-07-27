@@ -368,7 +368,8 @@ class SelfImprovingGame(MinimaxGame):
             return (
                 False,
                 f"reference solution scored {best:.2f}, expected 1.0 -- either "
-                "solve.sh does not solve the task or test.sh does not recognise it",
+                "solve.sh does not solve the task or test.sh does not recognise it."
+                + _failure_detail(job_dir),
                 best,
                 job_dir,
             )
@@ -679,6 +680,39 @@ class SelfImprovingGame(MinimaxGame):
 
     def _pool_ids(self) -> tuple[str, ...]:
         return tuple(p.name for p in self._admitted())
+
+
+def _failure_detail(job_dir: Path | None, limit: int = 700) -> str:
+    """What the gold solution and the verifier actually printed when it failed.
+
+    Without this the proposer is told only "scored 0.00" and has to guess which
+    of its three files disagreed -- so it guesses, and the next candidate fails
+    the same way. The verifier's stdout usually names the mismatch outright, and
+    an empty oracle log is itself the diagnosis: the solution died before
+    printing anything.
+    """
+    if job_dir is None or not job_dir.exists():
+        return ""
+    parts: list[str] = []
+    for label, pattern in (
+        ("verifier stdout", "*/verifier/test-stdout.txt"),
+        ("gold solution output", "*/agent/oracle.txt"),
+    ):
+        for path in sorted(job_dir.glob(pattern)):
+            try:
+                text = path.read_text(errors="replace").strip()
+            except OSError:
+                continue
+            if text:
+                parts.append(f"{label}:\n{text[-limit:]}")
+            else:
+                parts.append(
+                    f"{label}: EMPTY -- it produced no output at all, which usually "
+                    "means the script aborted on its first error (set -e) rather "
+                    "than computing a wrong answer."
+                )
+            break
+    return ("\n\n" + "\n\n".join(parts)) if parts else ""
 
 
 def _merge(primary: RolloutBatch, extra: RolloutBatch | None) -> RolloutBatch:

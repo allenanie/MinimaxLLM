@@ -371,3 +371,37 @@ class ReferencePointTest(SelfImproveLoopTest):
         summary = asyncio.run(self.game.play())
         # t01_1 scores 1.0, so it resets rather than accumulating.
         self.assertNotIn("t01_1", summary["rounds"][0]["suspected_impossible"])
+
+
+class GateFeedbackTest(SelfImproveLoopTest):
+    """A rejection must tell the proposer what actually went wrong."""
+
+    def test_empty_gold_output_is_reported_as_an_early_abort(self):
+        from hopt.games.selfimprove import _failure_detail
+
+        job = self.tmp / "job"
+        (job / "cand0__X" / "verifier").mkdir(parents=True)
+        (job / "cand0__X" / "agent").mkdir(parents=True)
+        (job / "cand0__X" / "verifier" / "test-stdout.txt").write_text("")
+        (job / "cand0__X" / "agent" / "oracle.txt").write_text("")
+
+        detail = _failure_detail(job)
+        self.assertIn("EMPTY", detail)
+        self.assertIn("aborted on its first error", detail)
+
+    def test_a_real_mismatch_is_quoted_back(self):
+        from hopt.games.selfimprove import _failure_detail
+
+        job = self.tmp / "job2"
+        (job / "cand0__X" / "verifier").mkdir(parents=True)
+        (job / "cand0__X" / "verifier" / "test-stdout.txt").write_text(
+            "expected total 61.75, got 61.8\n0.0\n"
+        )
+        detail = _failure_detail(job)
+        self.assertIn("expected total 61.75, got 61.8", detail)
+
+    def test_no_job_dir_is_not_an_error(self):
+        from hopt.games.selfimprove import _failure_detail
+
+        self.assertEqual(_failure_detail(None), "")
+        self.assertEqual(_failure_detail(self.tmp / "nope"), "")
