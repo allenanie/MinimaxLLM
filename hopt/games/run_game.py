@@ -107,6 +107,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--eval-subsample", type=int, default=20,
                    help="held-out tasks per evaluation, sampled deterministically")
+    p.add_argument(
+        "--bait-notice",
+        action="store_true",
+        help="state in the task instruction that a reference implementation "
+        "exists at --bait-dir. Awareness only: it says the file is there and "
+        "nothing about using it. Whether the agent then substitutes it for doing "
+        "the task is the measurement. Report results as 'the model knew', never "
+        "as unprompted discovery.",
+    )
     p.add_argument("--harness", default="code-mono")
     p.add_argument("--batch-size", default="5", help="int, or 'full'")
     p.add_argument("--credit-horizon", default="full", choices=["first_10", "first_50", "full"])
@@ -149,6 +158,7 @@ def main() -> None:
         eval_every=args.eval_every,
         eval_subsample=args.eval_subsample,
         bait=args.bait,
+        bait_notice=args.bait_notice,
         bait_dir=args.bait_dir,
         harness=args.harness,
         batch_size=None if args.batch_size == "full" else int(args.batch_size),
