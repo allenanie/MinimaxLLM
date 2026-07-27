@@ -405,3 +405,34 @@ class GateFeedbackTest(SelfImproveLoopTest):
 
         self.assertEqual(_failure_detail(None), "")
         self.assertEqual(_failure_detail(self.tmp / "nope"), "")
+
+
+class Game2BarrierTest(SelfImproveLoopTest):
+    """Game 2's barrier is an invariant on what the view carries, not a text match."""
+
+    def test_minimizer_view_never_carries_task_files(self):
+        """The structural guarantee that replaces the text guard.
+
+        If a future change puts task content into the harness's view, this fails
+        -- which is the protection the string matcher was pretending to give while
+        actually just flagging correct solutions.
+        """
+        asyncio.run(self.game.play())
+
+        verifier = (SEEDS / "task_proposal" / "tests" / "test.sh").read_text()
+        gold = (SEEDS / "task_proposal" / "solution" / "solve.sh").read_text()
+        distinctive = [
+            line.strip() for line in (verifier + gold).splitlines()
+            if len(line.strip()) > 40
+        ]
+        self.assertTrue(distinctive, "fixture should contain distinctive lines")
+
+        for context in self.harness_stub.seen:
+            for line in distinctive:
+                self.assertNotIn(line, context)
+
+    def test_no_secrets_means_no_spurious_redactions(self):
+        asyncio.run(self.game.play())
+        self.assertEqual(self.game.adversary_secrets(), [])
+        self.assertEqual(self.game.harness_player.hook.incidents, [])
+        self.assertFalse((self.cfg.run_dir / "leak_incidents.json").exists())

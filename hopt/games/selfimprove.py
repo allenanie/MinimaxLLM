@@ -229,20 +229,29 @@ class SelfImprovingGame(MinimaxGame):
         return self._adversary
 
     def adversary_secrets(self) -> list[str]:
-        """Every admitted task's verifier. The Game 2 barrier is *how it is graded*.
+        """Empty, deliberately. Game 2's barrier is structural, not textual.
 
-        Not the instruction -- the harness is supposed to read that. And
-        deliberately **not** ``solution/solve.sh``: a harness that solves the task
-        writes code resembling the gold solution, because there are only so many
-        ways to compute a CRC. Treating the gold solution as secret flags the
-        harness for succeeding, which cost a full run before it was caught.
+        Text matching cannot work here, and the two live false positives show why
+        it is not a tuning problem:
+
+        * ``solution/solve.sh`` -- a harness that solves the task writes code
+          resembling the gold solution. There are only so many ways to compute a
+          CRC. Flagged the harness for succeeding.
+        * ``tests/test.sh`` -- a *correct* solution emits exactly the values its
+          verifier checks for. Round 5 redacted a list of expected error tuples
+          the agent had produced by doing the task properly.
+
+        Both are cases where success and leakage are textually identical, so no
+        threshold separates them. The real barrier is structural and already
+        holds in two places: Harbor uploads the tests directory inside
+        ``Verifier.verify()``, after the agent phase, so the tests do not exist in
+        the container during the episode; and ``MinimizerView`` carries only the
+        rollout batch and trajectory records, never task files, so no prompt path
+        reaches the verifier. ``test_minimizer_view_never_carries_task_files``
+        pins the second -- an invariant cannot false-positive, and it fails loudly
+        if someone later widens the view.
         """
-        secrets: list[str] = []
-        for task in sorted(self.pool_dir.glob("*")):
-            path = task / "tests" / "test.sh"
-            if path.exists():
-                secrets.append(path.read_text(errors="replace"))
-        return secrets
+        return []
 
     def seed_adversary_artifact(self) -> TaskArtifact:
         return TaskArtifact.from_seed(
