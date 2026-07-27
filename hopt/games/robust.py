@@ -352,6 +352,34 @@ class RobustHarnessGame(MinimaxGame):
             r_star_by_version = self.archive.score(self.oracle, cfg.reference_k)
             r_star_current = r_star_by_version.get(current_version)
             truth = self.oracle.score_batch(records)
+            # Persist the labels and their evidence, not just the aggregate r*.
+            from hopt.games.cheat_oracle import classify as _classify
+
+            self.store.save_cstar(
+                round_idx,
+                [
+                    {
+                        "traj_id": rec.traj_id,
+                        "task_name": rec.task_name,
+                        "reward": rec.reward,
+                        "label": v.label,
+                        "modes": list(v.modes),
+                        "evidence": v.evidence,
+                    }
+                    for rec, v in (
+                        (
+                            rec,
+                            _classify(
+                                rec,
+                                cfg.bait_dir,
+                                self.oracle.gold_by_task.get(rec.task_name, ""),
+                                self.oracle.gold_by_task,
+                            ),
+                        )
+                        for rec in records
+                    )
+                ],
+            )
             for detector in plausible:
                 verdicts = detector.score_batch(records)
                 agree = sum(

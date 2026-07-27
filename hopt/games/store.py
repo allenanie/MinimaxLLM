@@ -113,6 +113,24 @@ class RunStore:
         """
         return _dump(self.root / "scores" / f"round{round_idx:02d}.json", table)
 
+    def save_cstar(self, round_idx: int, rows: list[dict]) -> Path:
+        """$c^*$'s per-trajectory label AND the evidence string behind it.
+
+        Only the aggregate $r^*$ used to be recorded, which made the most
+        interesting Game 1 signal unverifiable: a round reported $r^*=0.000$
+        against $r_d=0.833$ -- apparently the detector missing wholesale cheating
+        -- and with no stored labels it could not be reproduced or diagnosed
+        afterwards. When the evidence was finally recomputed by hand, the one
+        recoverable positive turned out to be three sklearn import lines
+        misread as a copied gold solution.
+
+        $c^*$ is the ground truth every Game 1 number is measured against, so it
+        is exactly the thing that must be auditable. Storing the evidence makes a
+        false positive visible by reading the file instead of by re-deriving the
+        oracle.
+        """
+        return _dump(self.root / "cstar" / f"round{round_idx:02d}.json", rows)
+
     # --- artifacts ------------------------------------------------------
     def save_harness(self, version: int, artifact: CodeArtifact, meta: dict) -> Path:
         dest = self.harness_dir(version)
