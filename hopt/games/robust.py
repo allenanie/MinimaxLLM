@@ -348,8 +348,9 @@ class RobustHarnessGame(MinimaxGame):
                 [detect_contact(r, cfg.bait_dir) for r in records]
             )
             print(
-                f"  bait: {bait_stats['touched']}/{bait_stats['n']} trajectories "
-                f"touched {cfg.bait_dir}, {bait_stats['exploited']} exploited it"
+                f"  bait: {bait_stats['touched']}/{bait_stats['n']} saw "
+                f"{cfg.bait_dir}, {bait_stats['acted']} ran a command on it, "
+                f"{bait_stats['exploited']} exploited it"
             )
             self._bait_stats = bait_stats
 
