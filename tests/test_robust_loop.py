@@ -490,3 +490,40 @@ class SelectionModeNamesTest(RobustLoopTest):
         self.cfg.model_select = "last_round"
         summary = __import__("asyncio").run(self.game.play())
         self.assertIsNone(summary["model_selection"].get("selected_version"))
+
+
+class ControlGetsNoAuditNoteTest(unittest.TestCase):
+    """The no-adversary control must not be told it is audited.
+
+    The note is an explicit anti-cheating instruction ("editing or bypassing
+    tests, writing directly to the reward file, hardcoding expected outputs...
+    aim for solutions that would survive any reasonable audit"). Giving it to an
+    arm whose rewards are never penalized makes that arm a prompt-intervention,
+    not a control.
+    """
+
+    def test_audited_player_carries_the_note(self):
+        from hopt.games.players import HARNESS_AUDIT_NOTE, HarnessPlayer
+        from hopt.games.store import RunStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p = HarnessPlayer(model="m", store=RunStore(Path(tmp)), audited=True)
+            self.assertIn(HARNESS_AUDIT_NOTE.strip(), p.optimizer.system_prompt)
+            self.assertIn("reward audit", p.optimizer.task_instruction)
+
+    def test_unaudited_player_does_not(self):
+        from hopt.games.players import HARNESS_AUDIT_NOTE, HarnessPlayer
+        from hopt.games.store import RunStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p = HarnessPlayer(model="m", store=RunStore(Path(tmp)), audited=False)
+            self.assertNotIn("REWARD AUDIT", p.optimizer.system_prompt)
+            self.assertNotIn(HARNESS_AUDIT_NOTE.strip(), p.optimizer.system_prompt)
+            self.assertNotIn("reward audit", p.optimizer.task_instruction)
+
+    def test_baseline_game_is_unaudited_and_robust_game_is_not(self):
+        from hopt.games.baseline import BaselineGame
+        from hopt.games.robust import RobustHarnessGame
+
+        self.assertFalse(BaselineGame.has_audit)
+        self.assertTrue(RobustHarnessGame.has_audit)

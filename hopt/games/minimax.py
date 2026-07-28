@@ -72,6 +72,7 @@ class MinimaxGame(ABC):
             spec=cfg.exp.entrypoint_spec,
             secrets=self.adversary_secrets,
             allowed=self.barrier_allowed,
+            audited=self.has_audit,
         )
 
     # --- game-specific hooks -------------------------------------------
@@ -486,6 +487,11 @@ class MinimaxGame(ABC):
             if f and f.exists():
                 gold[task] = f.read_text(errors="replace")
         return CheatOracle(self.cfg.bait_dir, gold)
+
+    #: Whether this game actually penalizes rewards by an audit. Drives the
+    #: harness prompt: telling an unaudited run that it is audited is an
+    #: anti-cheating instruction, which is precisely what a control must not get.
+    has_audit: bool = True
 
     def selection_detectors(self) -> tuple[Any, list[Any]]:
         """(final detector, plausible pool) for model selection.
