@@ -99,7 +99,10 @@ async def main(run: str, version: str | None) -> None:
         "per_task": rows,
         "job_dir": str(batch.job_dir),
     }
-    dest = Path(f"results/{run}/test_rstar.json")
+    # Name by version when one is requested, or a seed-harness measurement would
+    # overwrite the final-harness result already on disk.
+    suffix = f"_{version}" if version else ""
+    dest = Path(f"results/{run}/test_rstar{suffix}.json")
     dest.write_text(json.dumps(out, indent=2))
     print(f"  v={out['v']:.3f}  r*={out['r_star']:.3f}  "
           f"gap={out['v']-out['r_star']:+.3f}  cheated {out['n_cheated']}/{out['n']}")
