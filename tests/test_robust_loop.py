@@ -408,3 +408,61 @@ class HeldOutIsBaitedTest(RobustLoopTest):
         summary = __import__("asyncio").run(self.game.play())
         for ev in summary["heldout"]:
             self.assertNotIn("r_star", ev, "r* is meaningless with no bait planted")
+
+
+class ModelSelectionRunsInTheLoopTest(RobustLoopTest):
+    """Selection must happen during the run, not as a post-hoc analysis step.
+
+    The arithmetic is unit-tested elsewhere; what this covers is the wiring —
+    that play() actually consults the val split and that the harness sent to the
+    final evaluation is the selected one rather than whichever round came last.
+    """
+
+    def test_summary_records_the_selection(self):
+        self.cfg.n_rounds = 2
+        self._seed_audit()
+        summary = __import__("asyncio").run(self.game.play())
+        sel = summary.get("model_selection")
+        self.assertIsNotNone(sel, "play() did not record a model_selection")
+        self.assertEqual(sel["mode"], "final")
+        self.assertIn("table", sel)
+        self.assertIn("selected_version", sel)
+
+    def test_last_mode_disables_selection(self):
+        self.cfg.n_rounds = 2
+        self.cfg.model_select = "last"
+        self._seed_audit()
+        summary = __import__("asyncio").run(self.game.play())
+        self.assertIsNone(summary["model_selection"].get("selected_version"))
+
+    def test_the_selected_harness_is_the_one_evaluated(self):
+        """A selection nobody acts on is worse than none — it reads as applied."""
+        self.cfg.n_rounds = 2
+        self._seed_audit()
+        seen = []
+        original = self.game.evaluate_heldout
+
+        async def capture(harness, tag):
+            seen.append((tag, Path(harness.root).name))
+            return await original(harness, tag)
+
+        self.game.evaluate_heldout = capture
+        summary = __import__("asyncio").run(self.game.play())
+        sel = summary["model_selection"]
+        final_tag = [name for tag, name in seen if tag == "final"]
+        self.assertTrue(final_tag, "no final evaluation ran")
+        if sel.get("selected_version") is not None and not sel.get("fell_back_to_last"):
+            self.assertEqual(
+                final_tag[-1], f"v{sel['selected_version']:02d}",
+                "the final evaluation did not use the selected harness",
+            )
+
+    def test_selection_costs_no_rollouts(self):
+        """It re-scores stored trajectories; a rollout here would make it expensive."""
+        self.cfg.n_rounds = 2
+        self._seed_audit()
+        __import__("asyncio").run(self.game.play())
+        before = self.rollouts.calls
+        self.game.select_final_version()
+        self.assertEqual(self.rollouts.calls, before,
+                         "select_final_version triggered a rollout")
