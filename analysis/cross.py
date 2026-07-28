@@ -22,9 +22,18 @@ for run in runs:
         print(f"{run}: no held-out jobs")
         continue
     # prefer an explicit final, else the highest round
-    fin = [c for c in cands if c.name.endswith("final")]
-    pick = fin[-1] if fin else [c for c in cands if "baseline" not in c.name][-1] if len(cands) > 1 else cands[-1]
-    base = [c for c in cands if "baseline" in c.name]
+    # Match on the TAG after "heldout_", never on the whole dir name: the control
+    # arm's game is itself called "baseline", so `"baseline" in name` matches every
+    # one of its jobs and silently selected round08 as the baseline -- turning a
+    # baseline-vs-final comparison into two draws of the same harness.
+    def tag_of(c):
+        return c.name.split("heldout_", 1)[-1]
+
+    fin = [c for c in cands if tag_of(c) == "final"]
+    pick = fin[-1] if fin else sorted(
+        (c for c in cands if tag_of(c) != "round00_baseline"), key=lambda c: tag_of(c)
+    )[-1]
+    base = [c for c in cands if tag_of(c) == "round00_baseline"]
     finals[run] = {
         "final_tag": pick.name.split("heldout_", 1)[-1],
         "final": per_task(pick),
