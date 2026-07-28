@@ -103,19 +103,27 @@ class GameConfig:
     #: rounds are comparable, and both re-score stored trajectories, so selection
     #: costs no rollouts.
     #:
-    #: ``final``     -- penalize every version with the detector that won the last
-    #:                  round. One fixed yardstick across the series: "the best
-    #:                  harness under the adversary we ended up with".
-    #: ``strongest`` -- penalize each version with whichever plausible detector
-    #:                  penalizes it most. The inner max applied to selection as
-    #:                  well, so it is the pessimistic choice and the one
-    #:                  consistent with the minimax formulation.
-    #: ``last``      -- no selection; keep the final round's harness (old behaviour).
+    #: Names describe WHICH DETECTOR scores the candidates, except ``last_round``
+    #: which means no selection happens at all. An earlier naming used ``final``
+    #: vs ``last``, which are synonyms in English while meaning opposite things
+    #: here -- ``final`` selected a harness (often an early round) and ``last``
+    #: selected none.
+    #:
+    #: ``final_detector``     -- select the best version, scoring every version
+    #:                           with the detector that won the LAST ROUND. One
+    #:                           fixed yardstick: "the best harness under the
+    #:                           adversary we ended up with".
+    #: ``strongest_detector`` -- select the best version, scoring each version
+    #:                           with whichever plausible detector penalizes it
+    #:                           MOST. The inner max applied to selection too, so
+    #:                           it is the pessimistic, minimax-consistent choice.
+    #: ``last_round``         -- NO selection. Keep whatever the last round
+    #:                           produced, whatever val says about it.
     #:
     #: A game with no detectors (the control) has d identically 0 under any of
     #: these, so it selects on raw val v -- which is the correct reading of a
     #: no-detector arm rather than a special case.
-    model_select: str = "final"
+    model_select: str = "last_round"
     #: Rounds a pool task may go with no harness scoring above zero before it is
     #: flagged as suspected agent-impossible. Such a task maximizes the oracle
     #: score forever without measuring anything, so the proposer is told about it.
@@ -224,9 +232,17 @@ class GameConfig:
             )
         if self.n_candidates < 1:
             raise ValueError("n_candidates must be >= 1")
-        if self.model_select not in ("final", "strongest", "last"):
+        # Accept the old short names so earlier commands still run.
+        aliases = {"final": "final_detector", "strongest": "strongest_detector",
+                   "last": "last_round"}
+        if self.model_select in aliases:
+            self.model_select = aliases[self.model_select]
+        if self.model_select not in (
+            "final_detector", "strongest_detector", "last_round"
+        ):
             raise ValueError(
-                f"model_select must be final|strongest|last, got {self.model_select!r}"
+                "model_select must be final_detector|strongest_detector|last_round, "
+                f"got {self.model_select!r}"
             )
         if self.n_grounding_tasks < 0:
             raise ValueError("n_grounding_tasks must be >= 0")

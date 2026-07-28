@@ -420,17 +420,18 @@ class ModelSelectionRunsInTheLoopTest(RobustLoopTest):
 
     def test_summary_records_the_selection(self):
         self.cfg.n_rounds = 2
+        self.cfg.model_select = "final_detector"
         self._seed_audit()
         summary = __import__("asyncio").run(self.game.play())
         sel = summary.get("model_selection")
         self.assertIsNotNone(sel, "play() did not record a model_selection")
-        self.assertEqual(sel["mode"], "final")
+        self.assertEqual(sel["mode"], "final_detector")
         self.assertIn("table", sel)
         self.assertIn("selected_version", sel)
 
     def test_last_mode_disables_selection(self):
         self.cfg.n_rounds = 2
-        self.cfg.model_select = "last"
+        self.cfg.model_select = "last_round"
         self._seed_audit()
         summary = __import__("asyncio").run(self.game.play())
         self.assertIsNone(summary["model_selection"].get("selected_version"))
@@ -438,6 +439,7 @@ class ModelSelectionRunsInTheLoopTest(RobustLoopTest):
     def test_the_selected_harness_is_the_one_evaluated(self):
         """A selection nobody acts on is worse than none — it reads as applied."""
         self.cfg.n_rounds = 2
+        self.cfg.model_select = "final_detector"
         self._seed_audit()
         seen = []
         original = self.game.evaluate_heldout
@@ -460,9 +462,31 @@ class ModelSelectionRunsInTheLoopTest(RobustLoopTest):
     def test_selection_costs_no_rollouts(self):
         """It re-scores stored trajectories; a rollout here would make it expensive."""
         self.cfg.n_rounds = 2
+        self.cfg.model_select = "final_detector"
         self._seed_audit()
         __import__("asyncio").run(self.game.play())
         before = self.rollouts.calls
         self.game.select_final_version()
         self.assertEqual(self.rollouts.calls, before,
                          "select_final_version triggered a rollout")
+
+
+class SelectionModeNamesTest(RobustLoopTest):
+    """`final` vs `last` were synonyms in English meaning opposite things here."""
+
+    def test_old_names_still_resolve(self):
+        from hopt.games.config import GameConfig
+
+        for old, new in (("final", "final_detector"),
+                         ("strongest", "strongest_detector"),
+                         ("last", "last_round")):
+            cfg = GameConfig(run_name="x", game="robust", model_select=old)
+            self.assertEqual(cfg.model_select, new)
+
+    def test_last_round_selects_nothing_while_final_detector_selects(self):
+        """The distinction the old names hid: one picks a harness, one does not."""
+        self._seed_audit()
+        self.cfg.n_rounds = 2
+        self.cfg.model_select = "last_round"
+        summary = __import__("asyncio").run(self.game.play())
+        self.assertIsNone(summary["model_selection"].get("selected_version"))

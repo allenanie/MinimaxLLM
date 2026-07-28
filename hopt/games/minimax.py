@@ -505,7 +505,7 @@ class MinimaxGame(ABC):
         """
         mode = self.cfg.model_select
         versions = [e for e in self.archive.versions if e.records]
-        if mode == "last" or not versions:
+        if mode == "last_round" or not versions:
             return None, {"mode": mode, "reason": "no selection"}
 
         final_detector, pool = self.selection_detectors()
@@ -517,10 +517,10 @@ class MinimaxGame(ABC):
             for e in versions:
                 table[e.version] = sum(r.reward for r in e.records) / len(e.records)
                 detail[e.version] = "no detector (d=0)"
-        elif mode == "final" and final_detector is not None:
+        elif mode == "final_detector" and final_detector is not None:
             table = self.archive.score(final_detector, None)
             detail = {v: final_detector.id for v in table}
-        else:  # strongest: the inner max applied to selection
+        else:  # strongest_detector: the inner max applied to selection
             per_detector = {d.id: self.archive.score(d, None) for d in (pool or [])}
             if final_detector is not None and final_detector.id not in per_detector:
                 per_detector[final_detector.id] = self.archive.score(final_detector, None)

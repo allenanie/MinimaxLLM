@@ -164,13 +164,15 @@ def build_parser() -> argparse.ArgumentParser:
         "0.92. Below 1.0 the measured gold score becomes r(h*_x).",
     )
     p.add_argument(
-        "--model-select", default="final", choices=["final", "strongest", "last"],
-        help="how the final harness is chosen from the archive using the val split. "
-        "'final': penalize every version with the last round's winning detector. "
-        "'strongest': penalize each version with whichever plausible detector "
-        "penalizes it most (the inner max applied to selection). "
-        "'last': no selection, keep the final round's harness. A game with no "
-        "detectors has d=0 under any of these, so it selects on raw val v.",
+        "--model-select", default="last_round",
+        choices=["final_detector", "strongest_detector", "last_round"],
+        help="which harness is evaluated on test. 'final_detector': pick the best "
+        "version on val, scoring every version with the LAST ROUND's winning "
+        "detector. 'strongest_detector': pick the best version, scoring each with "
+        "whichever plausible detector penalizes it most. 'last_round': no "
+        "selection at all, keep whatever the last round produced. A game with no "
+        "detectors has d=0, so selection reduces to raw val v -- which measurably "
+        "favours cheating; see ALGORITHM.md.",
     )
     p.add_argument("--harness", default="code-mono")
     p.add_argument("--batch-size", default="5", help="int, or 'full'")
