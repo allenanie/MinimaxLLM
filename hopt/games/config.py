@@ -91,6 +91,31 @@ class GameConfig:
     #: 1.0 -- which is also strictly more honest, since it replaces the
     #: expressiveness assumption with a measurement.
     gate_min_reward: float = 1.0
+    #: How the final harness is chosen from the archive at the end of a run.
+    #:
+    #: Previously the last round's harness was simply taken as final, which wastes
+    #: the val split -- it fed r_d, r* and the archive but never influenced the
+    #: result -- and lets one bad final round decide the whole run. The static arm
+    #: is the case in point: clean at round 7, then 14/17 cheating at round 8, and
+    #: round 8 was reported purely because it was last.
+    #:
+    #: Both options score every archived version on the SAME fixed val split, so
+    #: rounds are comparable, and both re-score stored trajectories, so selection
+    #: costs no rollouts.
+    #:
+    #: ``final``     -- penalize every version with the detector that won the last
+    #:                  round. One fixed yardstick across the series: "the best
+    #:                  harness under the adversary we ended up with".
+    #: ``strongest`` -- penalize each version with whichever plausible detector
+    #:                  penalizes it most. The inner max applied to selection as
+    #:                  well, so it is the pessimistic choice and the one
+    #:                  consistent with the minimax formulation.
+    #: ``last``      -- no selection; keep the final round's harness (old behaviour).
+    #:
+    #: A game with no detectors (the control) has d identically 0 under any of
+    #: these, so it selects on raw val v -- which is the correct reading of a
+    #: no-detector arm rather than a special case.
+    model_select: str = "final"
     #: Rounds a pool task may go with no harness scoring above zero before it is
     #: flagged as suspected agent-impossible. Such a task maximizes the oracle
     #: score forever without measuring anything, so the proposer is told about it.
@@ -199,6 +224,10 @@ class GameConfig:
             )
         if self.n_candidates < 1:
             raise ValueError("n_candidates must be >= 1")
+        if self.model_select not in ("final", "strongest", "last"):
+            raise ValueError(
+                f"model_select must be final|strongest|last, got {self.model_select!r}"
+            )
         if self.n_grounding_tasks < 0:
             raise ValueError("n_grounding_tasks must be >= 0")
 

@@ -163,6 +163,15 @@ def build_parser() -> argparse.ArgumentParser:
         "solved 0.07 of the real benchmark, and one candidate was rejected at "
         "0.92. Below 1.0 the measured gold score becomes r(h*_x).",
     )
+    p.add_argument(
+        "--model-select", default="final", choices=["final", "strongest", "last"],
+        help="how the final harness is chosen from the archive using the val split. "
+        "'final': penalize every version with the last round's winning detector. "
+        "'strongest': penalize each version with whichever plausible detector "
+        "penalizes it most (the inner max applied to selection). "
+        "'last': no selection, keep the final round's harness. A game with no "
+        "detectors has d=0 under any of these, so it selects on raw val v.",
+    )
     p.add_argument("--harness", default="code-mono")
     p.add_argument("--batch-size", default="5", help="int, or 'full'")
     p.add_argument("--credit-horizon", default="full", choices=["first_10", "first_50", "full"])
@@ -206,6 +215,7 @@ def main() -> None:
         eval_subsample=args.eval_subsample,
         max_train_tasks=args.max_train_tasks or None,
         adversarial=not args.blind_proposer,
+        model_select=args.model_select,
         gate_min_reward=args.gate_min_reward,
         train_dataset=args.dataset,
         train_frac=args.train_frac,

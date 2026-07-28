@@ -73,6 +73,8 @@ class RobustHarnessGame(MinimaxGame):
         # trivially learnable and the adversary duly learned it (three regexes
         # over /solution, loss 0.012, blind to everything else).
         self.oracle = CheatOracle(cfg.bait_dir, self._gold_solutions()) if cfg.bait else None
+        #: id of the detector that won the most recent round, for model selection
+        self._last_winner_id: str | None = None
 
     # --- wiring ---------------------------------------------------------
     @property
@@ -124,6 +126,24 @@ class RobustHarnessGame(MinimaxGame):
             if solve and solve.exists():
                 out[task] = solve.read_text(errors="replace")
         return out
+
+    def selection_detectors(self):
+        """The last round's winner, and the plausible pool for the strongest mode.
+
+        Falls back to the whole pool when grounding produced no report -- a
+        selection that silently scored against nothing would be worse than a
+        slightly permissive one.
+        """
+        final = None
+        if self._last_winner_id is not None:
+            final = next((d for d in self.pool if d.id == self._last_winner_id), None)
+        if final is None and self.pool:
+            final = self.pool[-1]
+        plausible = list(self.pool)
+        if self.report is not None and self.report.plausible:
+            allowed = set(self.report.plausible)
+            plausible = [d for d in self.pool if d.id in allowed] or list(self.pool)
+        return final, plausible
 
     def _build_detector(self, artifact: CodeArtifact) -> Detector:
         if self.cfg.detector_kind == "code":
@@ -443,6 +463,7 @@ class RobustHarnessGame(MinimaxGame):
             self._bait_stats = bait_stats
 
         winner = next(d for d in self.pool if d.id == selection.winner.detector_id)
+        self._last_winner_id = winner.id
         verdicts = winner.score_batch(records)
         n_flagged = sum(1 for v in verdicts.values() if v.score > 0)
         # Sanction exactly the notes the harness is about to be shown, so the

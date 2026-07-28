@@ -284,6 +284,17 @@ class MinimaxGame(ABC):
                     record["heldout"] = ev
             self.store.save_round(round_idx, record)
 
+        # Choose which harness the final evaluation actually measures. Taking the
+        # last round unconditionally throws away the val split and lets one bad
+        # final round decide the run.
+        best_version, select_report = self.select_final_version()
+        if best_version is not None:
+            picked = self.store.harness_dir(best_version)
+            if picked.exists():
+                harness = CodeArtifact(picked)
+            else:
+                print(f"  (selected v{best_version} has no saved dir; keeping last)")
+                select_report["fell_back_to_last"] = True
         final_eval = await self.evaluate_heldout(harness, "final")
         if final_eval:
             heldout.append(final_eval)
@@ -293,6 +304,7 @@ class MinimaxGame(ABC):
             # The metric that answers whether the game worked: the real benchmark
             # split, never trained on, never containing a generated task.
             "heldout": heldout,
+            "model_selection": select_report,
             "run_dir": str(cfg.run_dir),
             "config": cfg.as_dict(),
             "rounds": self.store.load_rounds(),
@@ -474,6 +486,73 @@ class MinimaxGame(ABC):
             if f and f.exists():
                 gold[task] = f.read_text(errors="replace")
         return CheatOracle(self.cfg.bait_dir, gold)
+
+    def selection_detectors(self) -> tuple[Any, list[Any]]:
+        """(final detector, plausible pool) for model selection.
+
+        A game with no adversary returns (None, []), which makes d identically 0
+        and selection fall back to raw val v -- the correct reading of a
+        no-detector arm, not a special case.
+        """
+        return None, []
+
+    def select_final_version(self) -> tuple[int | None, dict]:
+        """Pick the harness to evaluate on test, using the fixed val split.
+
+        Scores every archived version -- not just the last -- because the last
+        round is not automatically the best one. Re-scores stored trajectories, so
+        this costs no rollouts.
+        """
+        mode = self.cfg.model_select
+        versions = [e for e in self.archive.versions if e.records]
+        if mode == "last" or not versions:
+            return None, {"mode": mode, "reason": "no selection"}
+
+        final_detector, pool = self.selection_detectors()
+        table: dict[int, float] = {}
+        detail: dict[int, str] = {}
+
+        if final_detector is None and not pool:
+            # d == 0: raw val v.
+            for e in versions:
+                table[e.version] = sum(r.reward for r in e.records) / len(e.records)
+                detail[e.version] = "no detector (d=0)"
+        elif mode == "final" and final_detector is not None:
+            table = self.archive.score(final_detector, None)
+            detail = {v: final_detector.id for v in table}
+        else:  # strongest: the inner max applied to selection
+            per_detector = {d.id: self.archive.score(d, None) for d in (pool or [])}
+            if final_detector is not None and final_detector.id not in per_detector:
+                per_detector[final_detector.id] = self.archive.score(final_detector, None)
+            for e in versions:
+                scored = {
+                    did: sc[e.version] for did, sc in per_detector.items()
+                    if e.version in sc
+                }
+                if not scored:
+                    continue
+                worst = min(scored, key=lambda d: scored[d])
+                table[e.version] = scored[worst]
+                detail[e.version] = worst
+
+        if not table:
+            return None, {"mode": mode, "reason": "nothing scorable"}
+        best = max(table, key=lambda v: table[v])
+        report = {
+            "mode": mode,
+            "selected_version": best,
+            "selected_score": table[best],
+            "scored_by": detail.get(best),
+            "table": {str(k): round(v, 4) for k, v in sorted(table.items())},
+            "last_version": max(table),
+        }
+        print(
+            f"  MODEL SELECT ({mode}): version {best} scores "
+            f"{table[best]:.3f} on val v*(1-d)"
+            + ("" if best == max(table) else f"  [last round was v{max(table)}: "
+               f"{table[max(table)]:.3f}]")
+        )
+        return best, report
 
     def train_batch_tasks(self, round_idx: int) -> list[str]:
         return batch_for_iteration(

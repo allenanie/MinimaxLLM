@@ -1255,3 +1255,67 @@ class ProvenanceContiguityTest(unittest.TestCase):
         gold = "x = distinctive_but_short(alpha=1, beta=2, gamma=3, delta=4444)\n"
         v = classify(self._record(gold * 3), "/solution", gold)
         self.assertEqual(v.modes, ())
+
+
+class ModelSelectionTest(unittest.TestCase):
+    """Selection runs on the fixed val split and costs no rollouts."""
+
+    class _Det:
+        kind = "fake"
+
+        def __init__(self, name, per_traj):
+            self.id = name
+            self.per_traj = per_traj
+            self.artifact = None
+
+        def score_batch(self, records):
+            return {r.traj_id: Verdict(self.per_traj.get(r.traj_id, 0.0), "") for r in records}
+
+        def secrets(self):
+            return []
+
+    def _archive(self, tmp):
+        arch = HarnessArchive(Path(tmp) / "archive.json")
+        # v1 scores high raw but is heavily penalized; v2 is modest and clean
+        arch.add(version=1, round_idx=1, files={"agent.py": "v1"},
+                 records=[record("a1", "t1", 1.0), record("a2", "t2", 1.0)])
+        arch.add(version=2, round_idx=2, files={"agent.py": "v2"},
+                 records=[record("b1", "t1", 0.6), record("b2", "t2", 0.6)])
+        return arch
+
+    def test_final_detector_mode_can_prefer_an_earlier_round(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            arch = self._archive(tmp)
+            harsh = self._Det("harsh", {"a1": 1.0, "a2": 1.0})   # zeroes v1 only
+            scores = arch.score(harsh, None)
+            self.assertAlmostEqual(scores[1], 0.0)
+            self.assertAlmostEqual(scores[2], 0.6)
+            self.assertEqual(max(scores, key=lambda v: scores[v]), 2,
+                             "v2 should win once v1's raw reward is penalized away")
+
+    def test_strongest_mode_takes_the_worst_detector_per_version(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            arch = self._archive(tmp)
+            d1 = self._Det("d1", {"a1": 1.0, "a2": 1.0})   # kills v1
+            d2 = self._Det("d2", {"b1": 1.0, "b2": 1.0})   # kills v2
+            per = {d.id: arch.score(d, None) for d in (d1, d2)}
+            strongest = {v: min(per[d][v] for d in per) for v in (1, 2)}
+            # under the pessimistic rule both collapse, so neither wins by luck
+            self.assertAlmostEqual(strongest[1], 0.0)
+            self.assertAlmostEqual(strongest[2], 0.0)
+
+    def test_no_detector_selects_on_raw_val_v(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            arch = self._archive(tmp)
+            raw = {e.version: sum(r.reward for r in e.records) / len(e.records)
+                   for e in arch.versions if e.records}
+            self.assertAlmostEqual(raw[1], 1.0)
+            self.assertAlmostEqual(raw[2], 0.6)
+            self.assertEqual(max(raw, key=lambda v: raw[v]), 1,
+                             "with d=0 the highest raw val reward wins")
+
+    def test_config_rejects_an_unknown_mode(self):
+        from hopt.games.config import GameConfig
+
+        with self.assertRaises(ValueError):
+            GameConfig(run_name="x", game="robust", model_select="nonsense")
