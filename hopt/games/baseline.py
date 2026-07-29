@@ -55,10 +55,6 @@ class BaselineGame(MinimaxGame):
     """Harness optimization on the real training split, no second player."""
 
     name = "baseline"
-    #: No detector, so no audit -- and therefore no audit note in the harness
-    #: prompt. Without this the "no adversary" control still receives an explicit
-    #: instruction to avoid verifier shortcuts, which is not a neutral baseline.
-    has_audit = False
 
     def __init__(self, cfg: GameConfig):
         super().__init__(cfg)

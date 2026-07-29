@@ -502,28 +502,24 @@ class ControlGetsNoAuditNoteTest(unittest.TestCase):
     not a control.
     """
 
-    def test_audited_player_carries_the_note(self):
-        from hopt.games.players import HARNESS_AUDIT_NOTE, HarnessPlayer
+    def test_no_arm_tells_the_harness_it_is_audited(self):
+        """The note is gone, not merely defaulted off.
+
+        G1 asks whether the detector's reward PENALTY teaches the harness to stop
+        cheating. An instruction saying so answers it for free in every arm: the
+        no-detector control cheated 3/50 with the note and 16/50 without it.
+        """
+        from hopt.games.players import HarnessPlayer
         from hopt.games.store import RunStore
 
         with tempfile.TemporaryDirectory() as tmp:
-            p = HarnessPlayer(model="m", store=RunStore(Path(tmp)), audited=True)
-            self.assertIn(HARNESS_AUDIT_NOTE.strip(), p.optimizer.system_prompt)
-            self.assertIn("reward audit", p.optimizer.task_instruction)
+            p = HarnessPlayer(model="m", store=RunStore(Path(tmp)))
+            for banned in ("REWARD AUDIT", "reward audit", "audit",
+                           "shortcut", "bypassing tests", "hardcoding expected"):
+                self.assertNotIn(banned, p.optimizer.system_prompt, banned)
+                self.assertNotIn(banned, p.optimizer.task_instruction, banned)
 
-    def test_unaudited_player_does_not(self):
-        from hopt.games.players import HARNESS_AUDIT_NOTE, HarnessPlayer
-        from hopt.games.store import RunStore
+    def test_the_constant_is_gone(self):
+        import hopt.games.players as players
 
-        with tempfile.TemporaryDirectory() as tmp:
-            p = HarnessPlayer(model="m", store=RunStore(Path(tmp)), audited=False)
-            self.assertNotIn("REWARD AUDIT", p.optimizer.system_prompt)
-            self.assertNotIn(HARNESS_AUDIT_NOTE.strip(), p.optimizer.system_prompt)
-            self.assertNotIn("reward audit", p.optimizer.task_instruction)
-
-    def test_baseline_game_is_unaudited_and_robust_game_is_not(self):
-        from hopt.games.baseline import BaselineGame
-        from hopt.games.robust import RobustHarnessGame
-
-        self.assertFalse(BaselineGame.has_audit)
-        self.assertTrue(RobustHarnessGame.has_audit)
+        self.assertFalse(hasattr(players, "HARNESS_AUDIT_NOTE"))
