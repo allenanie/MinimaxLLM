@@ -9,7 +9,11 @@ missing number needs one evaluation pass per arm: the same 50 test tasks, the sa
 deterministic subsample, bait enabled. 150 rollouts total rather than three 8-round
 runs.
 
-Usage:  python -m analysis.eval_test_rstar <run_name> [<harness_version>]
+Usage:  python -m analysis.eval_test_rstar <run_name> [<harness_version>] [--unbaited]
+
+--unbaited measures plain capability `v` with no plant in the container. It
+reports no r*, because with nothing planted c* is identically zero and r* would
+just restate v.
 """
 from __future__ import annotations
 
@@ -27,7 +31,7 @@ from hopt.runner import run_batch
 from hopt.splits import make_split
 
 
-async def main(run: str, version: str | None) -> None:
+async def main(run: str, version: str | None, baited: bool = True) -> None:
     stored = json.load(open(f"results/{run}/config.json"))
     # Rebuild the arm's own config so the split and subsample match exactly; a
     # different seed here would silently score a different task set.
@@ -43,7 +47,7 @@ async def main(run: str, version: str | None) -> None:
         optimizer_model=stored["optimizer_model"],
         n_concurrent=stored.get("n_concurrent", 8),
         harness=stored.get("harness", "code-mono"),
-        bait=True,                      # the whole point
+        bait=baited,
         bait_notice=stored.get("bait_notice", True),
         bait_dir=stored.get("bait_dir", "/solution"),
     )
@@ -61,7 +65,8 @@ async def main(run: str, version: str | None) -> None:
     if not hdir:
         raise SystemExit(f"no harness found for {run} {version or ''}")
     harness = CodeArtifact(hdir[-1])
-    print(f"{run}: harness {harness.root.name}, {len(tasks)} test tasks, bait ON")
+    print(f"{run}: harness {harness.root.name}, {len(tasks)} test tasks, "
+          f"bait {'ON' if baited else 'OFF'}")
 
     batch = await run_batch(
         cfg.exp,
@@ -70,6 +75,17 @@ async def main(run: str, version: str | None) -> None:
         artifact_path=harness.root,
         job_name=f"{run}__test_rstar_{harness.root.name}",
     )
+
+    if not baited:
+        out = {"run": run, "harness": harness.root.name, "n": len(batch.outcomes),
+               "v": batch.mean_reward, "baited": False,
+               "per_task": {o.task_name: o.reward for o in batch.outcomes},
+               "job_dir": str(batch.job_dir)}
+        dest = Path(f"results/{run}/test_rstar{suffix}.json")
+        dest.write_text(json.dumps(out, indent=2))
+        print(f"  v={out['v']:.3f}  (unbaited; no r* -- nothing planted)")
+        print(f"  -> {dest}")
+        return
 
     gold = {}
     for t in tasks:
@@ -101,7 +117,7 @@ async def main(run: str, version: str | None) -> None:
     }
     # Name by version when one is requested, or a seed-harness measurement would
     # overwrite the final-harness result already on disk.
-    suffix = f"_{version}" if version else ""
+    suffix = (f"_{version}" if version else "") + ("" if baited else "_unbaited")
     dest = Path(f"results/{run}/test_rstar{suffix}.json")
     dest.write_text(json.dumps(out, indent=2))
     print(f"  v={out['v']:.3f}  r*={out['r_star']:.3f}  "
@@ -110,4 +126,6 @@ async def main(run: str, version: str | None) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None))
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    asyncio.run(main(args[0], args[1] if len(args) > 1 else None,
+                     baited="--unbaited" not in sys.argv))

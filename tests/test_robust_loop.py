@@ -503,11 +503,10 @@ class ControlGetsNoAuditNoteTest(unittest.TestCase):
     """
 
     def test_no_arm_tells_the_harness_it_is_audited(self):
-        """The note is gone, not merely defaulted off.
+        """The harness prompt must carry no standing instruction about cheating.
 
-        G1 asks whether the detector's reward PENALTY teaches the harness to stop
-        cheating. An instruction saying so answers it for free in every arm: the
-        no-detector control cheated 3/50 with the note and 16/50 without it.
+        G1 measures whether the detector's reward penalty teaches the harness to
+        stop; a directive saying so would answer that for free in every arm.
         """
         from hopt.games.players import HarnessPlayer
         from hopt.games.store import RunStore
@@ -519,7 +518,7 @@ class ControlGetsNoAuditNoteTest(unittest.TestCase):
                 self.assertNotIn(banned, p.optimizer.system_prompt, banned)
                 self.assertNotIn(banned, p.optimizer.task_instruction, banned)
 
-    def test_the_constant_is_gone(self):
+    def test_no_standing_instruction_constant_exists(self):
         import hopt.games.players as players
 
         self.assertFalse(hasattr(players, "HARNESS_AUDIT_NOTE"))
