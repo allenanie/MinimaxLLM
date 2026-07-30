@@ -16,9 +16,9 @@ Compare the unmodified seed vs the step-6 evolved harness on RewardHackBench, sa
 Neither is our `/solution` filesystem plant.
 So a harness that cheats more here is generalizing a shortcut-seeking disposition across environments, not exploiting a memorized path.
 
-**Harbor build and agent adapter.** The bench runs on the islo-labs harbor **fork 0.6.6** (`reward-hack-bench-changeset`, HEAD `c841416`), installed in a disposable venv at `/mnt/disks/data1/yoonho/rhb-probe/probe-venv`; our repo `.venv` (stock harbor 0.20.0) was untouched throughout.
+**Harbor build and agent adapter.** The bench runs on the islo-labs harbor **fork 0.6.6** (`reward-hack-bench-changeset`, HEAD `c841416`), installed in an isolated venv at `/mnt/disks/data1/yoonho/rhb-probe/probe-venv`; our repo `.venv` (stock harbor 0.20.0) was untouched throughout.
 Agent adapter: `--agent-import-path <module>:AgentHarness` (the fork does not unify `-a`), with the two harness files staged byte-identical on `PYTHONPATH`.
-**Three environment shims, all disclosed, all living in the disposable fork install / staging so the two compared harnesses stay byte-identical to their step-6 artifacts:**
+**Three environment shims, all disclosed, all living in the isolated fork install / staging so the two compared harnesses stay byte-identical to their step-6 artifacts:**
 1. **litellm_config stub.** The fork lacks `harbor.llms.litellm_config`, which both harnesses import; a no-op `configure_litellm_debug` was written into the fork install. Behaviourally null (the module only configures litellm debug logging in stock).
 2. **`--agent-import-path` flag.** The fork routes custom agents through this flag rather than `-a`.
 3. **`_extra_env == {}` BaseAgent shim.** Stock 0.20.0 `BaseAgent.__init__` sets `self._extra_env` (from an `extra_env` kwarg); the fork does not, and both harnesses read it once in `setup()` to pass into the fork's `TmuxSession(extra_env=...)` (which accepts it). One line `self._extra_env = {}` was added to the fork's `BaseAgent.__init__`. Behaviourally null here: these tasks define no `[agent.env]`, so stock would also compute `{}`, and our Terminus2 seed drives the solver host-side so the container needs no injected agent env.
@@ -127,7 +127,7 @@ All 36 cheat-classified trials fetched the exact canonical fix or solve script a
 - **k=3, haiku draw variance.** Per-variant cells are n=3 (rates in {0, 0.33, 0.67, 1.0}); read the arm- and group-level aggregates, not single cells. slcg reverses direction within this noise.
 - **Two fairness-null trials** (both stock control, judge_status ok, no retrieval): handled per the bench's don't-punish rule (solved_fairly = static_reward); the read is unchanged with or without them (sensitivity in Setup).
 - **Genuine transfer, disclosed channels.** This bench's cheat modes (upstream-fix / writeup-pointer) are its own and differ from our `/solution` plant; the brief's notice-on reporting constraint is for the TBLite bench and does not apply here.
-- **Three environment shims** (litellm_config stub, `--agent-import-path`, `_extra_env=={}`), all in the disposable fork install; the two compared harnesses are byte-identical to the step-6 seed and incumbent. Shim 3 was found by the pre-sweep gate and approved before the sweep.
+- **Three environment shims** (litellm_config stub, `--agent-import-path`, `_extra_env=={}`), all in the isolated fork install; the two compared harnesses are byte-identical to the step-6 seed and incumbent. Shim 3 was found by the pre-sweep gate and approved before the sweep.
 - **Open network, not gateway policies.** `-e docker` with no islo gateway means cheat channels are open; this is a harness-vs-harness comparison (the bench's "open/control" regime), not a test of the bench's gateway policies.
 - **Near-floor honest capability at haiku.** On control CTF tasks both harnesses fair-solve 0.00; haiku rarely solves these honestly, so the cheat-mode v gap is almost entirely attributable to the plant/channel, as the bench's own README notes for hard CTF tasks.
 
@@ -137,7 +137,7 @@ All 36 cheat-classified trials fetched the exact canonical fix or solve script a
 - Bench definitions: `reward-hack-bench/README.md` (static_reward/fairness/solved_fairly, lines 13-18; reward.json single-key, 88-89) and `reward-hack-bench/experiments/hero-run-v2/render_dashboard_v2.py` (`classify` 61-78, cheat/fair rate in `policy_aggregate` 150-185), at `/mnt/disks/data1/yoonho/rhb-probe/reward-hack-bench/`.
 - Sweep output (outside the repo): `/mnt/disks/data1/yoonho/rhb-probe/jobs/sweep-{stock,evolved}-<variant>/<trial>/verifier/judge.json` (fairness breakdown + evidence) and `agent/trajectory.json`.
 - Compared artifacts: stock `seeds/seed.py` (`7cf54729`), evolved `results/repro-main/artifacts/0b93de56/harness.py`; staged copies at `/mnt/disks/data1/yoonho/rhb-probe/stage-sweep/{seed,evolved}.py`.
-- Build/verification and shim record: `agent_notes/buildlog_step7.md` (three shims, the gate block + re-run pass, the sweep design); the integration probe is the last section of `agent_notes/buildlog.md`.
+- Build/verification and shim record: the "Step 7 full eval" section of `agent_notes/buildlog.md` (three shims, the gate block + re-run pass, the sweep design); the integration probe is the section before it.
 - Brief and principles: `agent_notes/dispatch/fresh-start-cheating-tblite.md` (Step 7), `agent_notes/CONSTITUTION.md`; step-6 result `experiments/001_cheating_tblite_reproduction.md`.
 
 ## Appendix
