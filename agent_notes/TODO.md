@@ -16,7 +16,8 @@ All four open questions are answered; the brief's Decisions section is settled.
   - Step 4 (oracle) done: exact port (8352e96) plus two disclosed screens (shipped-text, temporal exposure) killing all 7 measured provenance false positives; labels reconcile with 3b exactly.
   - Gold-viability sweep done: 58/100 plants pay 1.0, 15/30 in train; recorded in gold_viability.json beside both corpora. Split decision still with Yoonho; default is unmodified split + viability-conditional reporting.
   - Step 5 (loop + proposer) done: 2-iteration codex smoke run, kill/resume verified byte-identical, claude backend verified, barrier probed empirically (reads NOT enforced; layout+silence holds, zero staged leaks), validation-exhaustion path exercised. Proposer subprocess HOME pinned to ~/yoonho after a shared-account state leak.
-  - Step 6 (reproduction run) next: settled config (notice-on, full 30-task train batch, 5 iterations), viability-conditional reporting per the surfaced split decision.
+  - Step 6 (reproduction) done: 8caa442. Control collapsed (r*=0.00 at v=0.59); main run's held-out seed-vs-final showed v 0.70->0.75 but r* 0.25->0.05 (gap 0.45->0.70, acted 13->17/20). experiments/001 written, all numbers script-verified.
+  - Step 7 (RewardHackBench transfer) in progress; starting with the harbor-fork integration probe in a scratch clone.
 - [x] Commit the `backup/` move (landed as 9f6e5b6 and 656fac8).
 
 ## Blocked
