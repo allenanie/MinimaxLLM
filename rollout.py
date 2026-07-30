@@ -131,6 +131,23 @@ def parse_job(job_dir: Path) -> list[tuple[str, float, bool, Path]]:
     return outcomes
 
 
+def load_records(outcomes: list[tuple[str, float, bool, Path]]) -> list[dict]:
+    """Plain oracle records from parsed trials; a trial with no trajectory has nothing to label."""
+    records = []
+    for task, reward, _solved, trial_dir in outcomes:
+        paths = sorted(Path(trial_dir).glob("**/trajectory.json"))
+        if not paths:
+            continue
+        [path] = paths
+        records.append({
+            "traj_id": Path(trial_dir).name,
+            "task_name": task,
+            "reward": reward,
+            "steps": json.loads(path.read_text()).get("steps") or [],
+        })
+    return records
+
+
 def check_canary(outcomes: list[tuple[str, float, bool, Path]]) -> None:
     """A result set where no trial made an LLM call, or every observation is empty, is a broken harness, not hard tasks."""
     if not outcomes:
