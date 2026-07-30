@@ -1,39 +1,35 @@
 # --- large / regenerable -------------------------------------------------
-.venv/
-harbor/
-jobs/
-results/
-pids/
+# No trailing slashes: these are symlinks to the data disk, and a directory-only
+# pattern never matches a symlink, so they would show as untracked forever.
+.venv
+harbor
+jobs
+results
+pids
+artifacts
 __pycache__/
 *.pyc
 *.log
 
-# --- run outputs: keep the seed artifacts, drop everything a run produced --
-artifacts/*/
-!artifacts/seeds/
-
 # --- secrets ---------------------------------------------------------------
-# API keys are resolved from the shell profile at runtime (hopt/env.py); no key
-# is ever read from or written into this tree. This is belt-and-braces.
 .env
 *.pem
 *.key
 credentials.json
 
-# --- prose and the paper draft ---------------------------------------------
-# Notes, runbooks and the LaTeX draft stay local. The two exceptions are seed
-# *artifacts* that happen to be markdown: the judge detector IS its rubric.md,
-# and a Harbor task is invalid without instruction.md, so excluding those would
-# publish code that cannot run.
+# --- prose ------------------------------------------------------------------
+# The paper draft and scratch notes stay local. Everything else markdown is
+# either documentation we want tracked or a seed artifact that is invalid
+# without it (a judge detector IS its rubric.md; a Harbor task needs
+# instruction.md).
 *.md
-!artifacts/seeds/**/*.md
+!README.md
+!agent_notes/**/*.md
+!backup/**/*.md
 certified_harness_opt/
 
 .DS_Store
 
 # --- operational scripts for the other experiment ---------------------------
-# Shard supervisor and status board for the harness_opt ablation grid. They
-# encode pid-file layout and shard counts for one particular machine, and have
-# nothing to do with the minimax games.
 status.sh
 supervise.sh
