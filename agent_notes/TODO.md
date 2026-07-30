@@ -5,9 +5,9 @@ Principles: `agent_notes/CONSTITUTION.md` (human-only).
 
 All four open questions are answered; the brief's Decisions section is settled.
 
-## Active
+## Done: execution trail
 
-- [ ] Execute steps 0-7 via subagents, one step per agent, coordinator verifies each acceptance check before committing.
+- [x] Execute steps 0-7 via subagents, one step per agent, coordinator verifies each acceptance check before committing.
   - Step 0 (housekeeping) done: 091150b.
   - Step 1 (store.py + tests) done: 7013b15.
   - Step 2 (seed + rollout) done: seed on 2 tasks verified, broken-candidate and canary checks pass.
@@ -28,6 +28,10 @@ All non-deferred dispatch steps complete. Substrate (store/rollout/oracle/propos
 
 (none)
 
+## Active (2026-07-30)
+
+- [ ] Builder-adversary game: draft dispatch at `agent_notes/dispatch/builder-adversary-game.md`. Decisions settled 2026-07-30 (task-editing adversary, incumbent source visible, strict gate, reward payoffs, counterfactual arm as core metric); awaiting Yoonho's judge-spec edit and `## Status: approved`.
+
 ## Deferred
 
-- [ ] Step 8: Game 1 adversary (detector, grounding, barrier, archive re-scoring) onto the new substrate; separate dispatch once the loop is proven.
+- [ ] Detector adversary (the old "Game 1" wording: detector, grounding, archive re-scoring); the task-editing game dispatch above carries the barrier machinery it would reuse.
