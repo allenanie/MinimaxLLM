@@ -19,3 +19,10 @@ Fix: none available from inside the session; the override is now standard in acc
 Tried: `python -c "import harbor"` as an import check from the repo root.
 Happened: the untracked `harbor` symlink resolves as an empty namespace package (`harbor.__file__` is None), so the check passes with no harbor installed.
 Workaround: every import check asserts `harbor.__file__ is not None` and sets cwd away from the repo root (`rollout.py::validate_candidate`).
+
+## 2026-07-30: pgrep -f self-match deadlocks poll loops
+
+Tried: two background shells polling `while pgrep -f "harbor run.*smoke5-i01-inc"; do sleep; done` to wait for a harbor job.
+Happened: each poller's own /bin/zsh command line contains the pattern text, so the regex matches the sibling poller and both spun forever after harbor exited; the step 5 agent parked itself on a notification that could never fire.
+Workaround: coordinator killed the pollers and resumed the agent with the on-disk state.
+Fix: poll file state, not process state; harbor's completion signal is the job-level result.json (`while [ ! -f jobs/<job>/result.json ]; do sleep 15; done`), or match the exact binary path.
