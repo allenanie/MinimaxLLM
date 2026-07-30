@@ -41,3 +41,32 @@ pytest 9.1.1
 harbor is still 0.20.0 in the shared venv after the sync (checked via `importlib.metadata.version`).
 `uv.lock` was regenerated once with `env -i ... uv lock` so it carries the default fork strategy rather than the session-injected `UV_FORK_STRATEGY=fewest`, which would otherwise churn the lock between shells.
 Not committed; coordinator verifies and commits.
+
+## Step 1: store.py + tests (2026-07-30)
+
+Wrote `store.py`: module functions taking `run_dir` explicitly, no module state.
+`put_artifact(run_dir, files)` accepts a dict of relative-path -> text or a Path (dir or single file), ids by the first 8 hex chars of sha256 over the json-dumped sorted (path, content) pairs, and leaves an existing `artifacts/<id>/` untouched.
+`get_artifact` returns the path; `read_state` returns `{}` when `state.json` is absent; `write_state` writes `state.json.tmp` then `os.replace`.
+`append_step` numbers by the count of existing `steps/*.json` and opens the slot with mode `"x"`, so an occupied slot (miscounted resume, concurrent writer, or a gap in the sequence) raises `FileExistsError` instead of overwriting a recorded Step.
+
+Wrote `tests.py` with exactly the two store cases from the testing policy: artifact id stable under dict key reordering (also asserts a single artifact dir, since invisible duplicates are the failure mode), and `append_step` raising on an occupied slot with the existing file's content unchanged.
+Plain pytest functions on `tmp_path`, no fixtures or classes, so step 4 can append oracle cases.
+
+Acceptance commands and output:
+
+```
+$ UV_PROJECT_ENVIRONMENT=$PWD/.venv VIRTUAL_ENV= uv run pytest tests.py -q
+..                                                                       [100%]
+2 passed in 0.01s
+```
+
+```
+$ grep -n '^import\|^from' store.py
+3:import hashlib
+4:import json
+5:import os
+6:from pathlib import Path
+```
+
+No harbor and no LLM SDK imports.
+Not committed; coordinator verifies and commits.
