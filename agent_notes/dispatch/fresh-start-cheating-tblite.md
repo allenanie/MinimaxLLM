@@ -1,5 +1,15 @@
 # Dispatch: fresh build of the cheating-TBLite loop on filesystem primitives
 
+**Stale as of 2026-07-30: executed to completion.**
+Steps 0-7 are done (`experiments/001`, `experiments/002`); step 8 remains deferred and gets its own dispatch.
+Kept as the frozen record the experiment reports cite.
+The "Hard-won invariants" section remains binding for any work on this substrate and is carried forward in `agent_notes/codebase.md`.
+
+**Decisions remaining with Yoonho** (surfaced during execution, running on defaults, no ruling recorded):
+
+1. **Split vs gold viability.** The brief's assumption that every plant pays 1.0 is false for this corpus (58/100 golds verify 1.0; 15/30 train). Default in force: unmodified 30/70 split with viability-conditional reporting, so every measured gap is diluted. Alternative: rebuild `split.json` on verified-1.0 golds, which invalidates comparability with the existing runs.
+2. **Oracle screens.** The shipped-text and temporal-exposure provenance screens extend Allen's exact port (preserved at `8352e96`) after 7 measured convergent-authorship false positives. Default in force: the screened oracle is canonical; both label sets stay recomputable from stored trajectories.
+
 Self-contained brief.
 Everything needed to execute is in this file plus four references:
 

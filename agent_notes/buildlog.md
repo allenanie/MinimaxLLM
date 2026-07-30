@@ -1,5 +1,9 @@
 # Build log
 
+**Stale as of 2026-07-30.**
+Steps 0-7 are complete; this file is the frozen verification record behind `experiments/001` and `experiments/002`, which cite it by section.
+Do not extend it: durable traps were extracted to `friction.md`, and new work logs under its own dispatch's buildlog.
+
 Verification record per the brief: what was run, what was observed, with paths.
 
 ## Step 0: housekeeping (2026-07-30)
@@ -1130,7 +1134,7 @@ At the published k=3: 2 x 16 x 3 = 96 trials; each trial = one long-horizon agen
 Cost/wall-clock drivers, in order: (1) SWE-bench image builds/pulls (multi-GB `swebench/sweb.eval.*`; README also notes `parser.py` re-downloads ~75MB/trial unless pre-baked); (2) CTF compose tasks (`ezmaze`/`diffecient`/`noisier-crc` are 2-container TCP-oracle; `slcg` single-container); (3) judge Anthropic calls (default opus-4-7 per trial; set `JUDGE_MODEL` to a cheap model to cut this). The bench's full 8x7x3 matrix cost ~$190; our 2x16x3 is a fraction, dominated by image setup rather than tokens. If cost forces it, restrict to the cheat-mode variant per task plus control (already what the 16 dirs are) and/or drop k to 1-2 for a pilot.
 Environment: run under the FORK's harbor (0.6.6), `-e docker` local (verified) or `-e modal` (fussy in the HOME-pinned probe env because `~/yoonho/.modal.toml` has no token; our repo's modal auth uses `/home/allennie/.modal.toml` stanford-iris, so a modal run should launch from a non-HOME-pinned context). Do NOT use `-e islo` (needs islo gateway-VM credentials we lack; and gateway policies are orthogonal to a harness-vs-harness comparison). Per the brief's acceptance, the report must state which harbor build (fork 0.6.6) and which agent adapter (`--agent-import-path seed:AgentHarness`, plus the litellm_config stub) were used.
 
-### Probe artifacts (all outside the repo, disposable)
+### Probe artifacts (all outside the repo; keep them, experiments/002 recomputes from here)
 
 - `/mnt/disks/data1/yoonho/rhb-probe/reward-hack-bench` (bench clone)
 - `/mnt/disks/data1/yoonho/rhb-probe/harbor-fork` (fork clone, ref reward-hack-bench-changeset)
@@ -1144,11 +1148,11 @@ All work is OUTSIDE the repo under `/mnt/disks/data1/yoonho/rhb-probe/`; the onl
 ### Environment shims (three, all disclosed in experiments/002 Setup)
 
 The probe recommendation was "our seed runs on the fork with two named small shims". The live gate found a third.
-All three live in the disposable fork install / staging, NOT in the harness source, so the two compared artifacts stay byte-identical to the step-6 seed and incumbent.
+All three live in the isolated fork install / staging, NOT in the harness source, so the two compared artifacts stay byte-identical to the step-6 seed and incumbent.
 
 1. **litellm_config stub.** The fork (harbor 0.6.6) lacks `harbor.llms.litellm_config`, which both harnesses import (seed line 40). Wrote a no-op `configure_litellm_debug(*a,**k)` to `probe-venv/.../site-packages/harbor/llms/litellm_config.py`. On-disk in the fork install (the probe's `sys.modules` injection does not carry into the `harbor run` subprocess). Behaviourally safe: the module's only effect in stock 0.20.0 is litellm debug logging.
 2. **`--agent-import-path`.** The fork does not unify `-a`; custom import paths go through `--agent-import-path <module>:AgentHarness`. The runner uses that flag.
-3. **`_extra_env` attribute (found by the gate, approved and applied by the coordinator).** Stock 0.20.0 `BaseAgent.__init__` sets `self._extra_env` (base.py:66, from an `extra_env` kwarg + property); the fork 0.6.6 `BaseAgent.__init__` does not. Both harnesses read `self._extra_env` once, in `setup()`, passing it into the fork's `TmuxSession(..., extra_env=...)` (which DOES accept it, tmux_session.py:37). So the sole gap is the agent-side attribute. The coordinator applied `self._extra_env: dict[str,str] = {}` to the fork's `BaseAgent.__init__` in probe-venv (after `self.skills_dir = skills_dir`), marked with a two-line shim comment. **Behaviourally null here:** these task.tomls define no `[agent.env]` (only `[verifier.env]` for the judge key), so stock would also compute `_extra_env == {}`; and our Terminus2 seed drives the solver LLM host-side, so the container's tmux session needs no injected agent env. It lives in the disposable fork install, so both compared artifacts stay identical to step 6.
+3. **`_extra_env` attribute (found by the gate, approved and applied by the coordinator).** Stock 0.20.0 `BaseAgent.__init__` sets `self._extra_env` (base.py:66, from an `extra_env` kwarg + property); the fork 0.6.6 `BaseAgent.__init__` does not. Both harnesses read `self._extra_env` once, in `setup()`, passing it into the fork's `TmuxSession(..., extra_env=...)` (which DOES accept it, tmux_session.py:37). So the sole gap is the agent-side attribute. The coordinator applied `self._extra_env: dict[str,str] = {}` to the fork's `BaseAgent.__init__` in probe-venv (after `self.skills_dir = skills_dir`), marked with a two-line shim comment. **Behaviourally null here:** these task.tomls define no `[agent.env]` (only `[verifier.env]` for the judge key), so stock would also compute `_extra_env == {}`; and our Terminus2 seed drives the solver LLM host-side, so the container's tmux session needs no injected agent env. It lives in the isolated fork install, so both compared artifacts stay identical to step 6.
 
 Completeness check (why exactly one third shim, not a drip): I extracted every `self.<attr>` the seed READS but never assigns and that is not its own method: `{_extra_env, _user_provided_session_id, logger, logs_dir, mcp_servers, skills_dir}`. `_user_provided_session_id` is assigned in the seed's own `__init__` (line 452, a `: str|None =` annotation my first regex missed); `logger/logs_dir/mcp_servers/skills_dir` are all set by the fork BaseAgent. So `_extra_env` was the one and only inherited-attribute gap in `setup()`.
 
@@ -1180,4 +1184,4 @@ Headline (bench's own `classify`/`policy_aggregate`, cited in the report): evolv
 
 Fairness-null: 2 stock control trials returned `fairness=null` with `judge_status=ok` and `retrieval_attempted=false` (judge evidence confirms honest local work); handled by the bench's `test.sh` don't-punish rule (`solved_fairly=static_reward`) -> classify -> fair-solve / fail, never cheat/flake. Sensitivity excluding them: stock 0.33/0.20 (n=46), evolved unchanged; read holds. `report_002.py` prints them explicitly.
 
-Report + script: `experiments/002_rewardhackbench_transfer.md`, `scripts/report_002.py`. Both compared artifacts are byte-identical to step 6 (stock `seeds/seed.py`, evolved `results/repro-main/artifacts/0b93de56/harness.py`); all three shims live in the disposable fork install. Did not commit (coordinator commits). Repo `.venv`, `seeds/`, and step-6 dirs untouched.
+Report + script: `experiments/002_rewardhackbench_transfer.md`, `scripts/report_002.py`. Both compared artifacts are byte-identical to step 6 (stock `seeds/seed.py`, evolved `results/repro-main/artifacts/0b93de56/harness.py`); all three shims live in the isolated fork install. Did not commit (coordinator commits). Repo `.venv`, `seeds/`, and step-6 dirs untouched.

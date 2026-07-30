@@ -3,7 +3,7 @@
 `--proposer codex:<model>` or `claude:<model>`; nothing downstream knows which backend ran.
 The read barrier is layout plus silence: the answer key lives outside this subtree (private/<run>/)
 and its path is never written into any staged file. Reads outside the workspace are NOT reliably
-sandbox-enforced (see buildlog_step5.md); writes are, for codex.
+sandbox-enforced (step-5 barrier probe, agent_notes/buildlog.md); writes are, for codex.
 """
 
 import json

@@ -1,5 +1,32 @@
 # Friction log
 
+## 2026-07-30: harbor writes the job-level result.json early, so its existence is not a completion signal
+
+Tried: treating `jobs/<job>/result.json` as the completion signal while waiting out a killed run's orphaned harbor subprocess.
+Happened: harbor writes a job-level `result.json` early in a running job, so relaunching against a still-running orphan would rmtree the job dir under it.
+Workaround: completion is the per-trial `result.json` count reaching the task count plus the harbor process being gone (`/proc/<pid>` absent); `optimize.evaluate` reuses a job dir only if `parse_job` covers all requested tasks.
+Fix: none available upstream; any future poller must count per-trial files, never stat the job-level one.
+
+## 2026-07-30: codex exec blocks on stdin when run headless
+
+Tried: launching `codex exec` from a detached driver.
+Happened: codex sat on "Reading additional input from stdin...", which would hang an unattended run forever.
+Workaround: both proposer backends run with `stdin=subprocess.DEVNULL` (`proposer.py`).
+
+## 2026-07-30: proposer subprocess inherited HOME=/home/allennie and leaked session state
+
+Tried: running the claude proposer backend with the inherited environment.
+Happened: it wrote session state into `/home/allennie/.claude/projects/`, violating the shared-account rule; the two stray dirs were deleted.
+Workaround: `proposer.py` pins `HOME=~/yoonho` for both backends (codex uses `CODEX_HOME=~/yoonho/.codex`).
+Fix: pin HOME in every subprocess env constructed on this box, not just the proposer's.
+
+## 2026-07-30: task.toml docker_image makes harbor skip the Dockerfile, silently unbaking a corpus
+
+Tried: appending a `COPY _solution /solution` layer to the deep-swe Dockerfiles during the bake.
+Happened: `should_use_prebuilt_docker_image` (harbor `environments/definition.py`) returns True whenever `task.toml` sets `docker_image` and `force_build` is off, so harbor ignores the Dockerfile entirely and the plant layer would be silently dead: a corpus that looks baited but is not.
+Workaround: `scripts/bake_bait.py` replaces the Dockerfile with `FROM <the task's prebuilt image>` plus the COPY and removes the `docker_image` key from `task.toml`, recorded in the manifest under `deviations`.
+Fix: for any future bake, verify the plant from inside a built container, never from the Dockerfile text.
+
 ## 2026-07-30: stale MODAL_PROFILE export breaks scrubbed-env modal jobs
 
 Tried: running a harbor modal job with a scrubbed subprocess env that carried the shell's `MODAL_PROFILE=iris-lab-ws`.
