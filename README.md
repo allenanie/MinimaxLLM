@@ -14,7 +14,7 @@ Files not yet present are the contract; they land step by step per the brief.
 |---|---|
 | `store.py` | the primitives: put_artifact, get_artifact, read/write_state, append_step |
 | `rollout.py` | the harbor boundary: run a job, parse results, render trajectories, health check |
-| `oracle.py` | c*: bait contact + provenance, over plain trajectory dicts |
+| `cheat_oracle.py` | c*: bait contact + provenance, over plain trajectory dicts |
 | `proposer.py` | the barrier: stage a scoped workspace, launch a headless agent, log, verify |
 | `optimize.py` | the loop: rollout -> evidence -> propose -> validate -> compare -> Step |
 | `tests.py` | the two things worth testing (store id stability, oracle labels) |

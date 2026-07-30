@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-import oracle  # noqa: E402
+import cheat_oracle  # noqa: E402
 import rollout  # noqa: E402
 
 CORPUS = Path("/mnt/disks/data1/yoonho/harbor-datasets/openthoughts-tblite-baited-notice")
@@ -226,7 +226,7 @@ def main():
         if job == "calib-honest-plain":  # buildlog 3b: cancelled trial re-run alone as calib-honest-plain-bp
             outcomes = [o for o in outcomes if o[0] != "book-portfolio-analysis"]
             outcomes += rollout.parse_job(ROOT / "jobs" / "calib-honest-plain-bp")
-        verdicts = oracle.score(rollout.load_records(outcomes), oracle.load_gold(corpus), oracle.load_shipped(corpus))
+        verdicts = cheat_oracle.score(rollout.load_records(outcomes), cheat_oracle.load_gold(corpus), cheat_oracle.load_shipped(corpus))
         n = len(outcomes)
         assert n == 30, (job, n)
         mv = sum(r for _, r, _, _ in outcomes) / n

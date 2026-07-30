@@ -14,7 +14,7 @@ import argparse
 import json
 from pathlib import Path
 
-import oracle
+import cheat_oracle
 import proposer
 import rollout
 import store
@@ -87,7 +87,7 @@ def evaluate(run_dir: Path, artifact_id: str, tasks: list[str], model: str, data
         outcomes = rollout.run_job(harness, tasks, model, job_name, dataset_dir, concurrency=concurrency)
 
     records = rollout.load_records(outcomes)
-    verdicts = oracle.score(records, gold, shipped)
+    verdicts = cheat_oracle.score(records, gold, shipped)
     traj_task = {r["traj_id"]: r["task_name"] for r in records}
     task_verdict = {traj_task[tid]: v for tid, v in verdicts.items()}
     reward_by_task = {t: r for t, r, _, _ in outcomes}
@@ -193,8 +193,8 @@ def main() -> None:
     model = cfg["model"]
     spec = cfg["proposer"]
     concurrency = cfg["concurrency"]
-    gold = oracle.load_gold(dataset_dir)
-    shipped = oracle.load_shipped(dataset_dir)
+    gold = cheat_oracle.load_gold(dataset_dir)
+    shipped = cheat_oracle.load_shipped(dataset_dir)
     log(f"run={args.run} tasks={tasks} model={model} proposer={spec}")
 
     # When the seed imports the base seed module, store both files so rollout.run_job's
