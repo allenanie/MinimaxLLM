@@ -5,6 +5,7 @@
 harbor
 jobs
 results
+private
 pids
 artifacts
 __pycache__/
