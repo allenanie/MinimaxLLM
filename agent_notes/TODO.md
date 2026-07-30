@@ -8,7 +8,8 @@ All four open questions are answered; the brief's Decisions section is settled.
 ## Active
 
 - [ ] Execute steps 0-7 via subagents, one step per agent, coordinator verifies each acceptance check before committing.
-- [ ] Commit the `backup/` move (staged, uncommitted).
+  - Step 0 (housekeeping: README, pyproject, gitignore) in progress.
+- [x] Commit the `backup/` move (landed as 9f6e5b6 and 656fac8).
 
 ## Blocked
 

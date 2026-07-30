@@ -1,0 +1,12 @@
+[project]
+name = "minimaxllm"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+# Flat scripts, not a package; harbor comes from the shared venv, not from here.
+package = false
