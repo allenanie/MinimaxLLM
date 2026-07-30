@@ -27,6 +27,7 @@ credentials.json
 !README.md
 !agent_notes/**/*.md
 !backup/**/*.md
+!experiments/**/*.md
 certified_harness_opt/
 
 .DS_Store
