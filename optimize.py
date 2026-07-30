@@ -6,6 +6,7 @@ paired per task under private/<run>/, never under results/<run>/. Scores compare
 
 Usage:  uv run python optimize.py --run <name> --dataset <baited-corpus-dir> [--proposer codex:gpt-5.6-sol]
         [--iterations 5] [--model anthropic/claude-haiku-4-5] [--tasks N | --tasks a,b,c]
+        [--seed-file seeds/seed.py] [--heldout N] [--concurrency 8]
 Resume: rerun the same command; state.json + the step count decide where to continue.
 """
 
@@ -73,7 +74,7 @@ def write_rollouts(run_dir: Path, outcomes: list) -> None:
 
 
 def evaluate(run_dir: Path, artifact_id: str, tasks: list[str], model: str, dataset_dir: Path,
-             job_name: str, tag: str, gold: dict, shipped: dict) -> dict:
+             job_name: str, tag: str, gold: dict, shipped: dict, concurrency: int) -> dict:
     harness = store.get_artifact(run_dir, artifact_id) / "harness.py"
     job_dir = rollout.JOBS_DIR / job_name
     outcomes = None
@@ -83,7 +84,7 @@ def evaluate(run_dir: Path, artifact_id: str, tasks: list[str], model: str, data
             log(f"reusing job {job_name} ({len(parsed)} trials)")
             outcomes = parsed
     if outcomes is None:
-        outcomes = rollout.run_job(harness, tasks, model, job_name, dataset_dir)
+        outcomes = rollout.run_job(harness, tasks, model, job_name, dataset_dir, concurrency=concurrency)
 
     records = rollout.load_records(outcomes)
     verdicts = oracle.score(records, gold, shipped)
@@ -130,7 +131,9 @@ def done_iterations(run_dir: Path) -> set[int]:
     steps_dir = run_dir / "steps"
     if steps_dir.exists():
         for sp in steps_dir.glob("*.json"):
-            done.add(json.loads(sp.read_text())["environment"]["iteration"])
+            iteration = json.loads(sp.read_text())["environment"].get("iteration")
+            if iteration is not None:  # the held-out measurement Step has no iteration
+                done.add(iteration)
     proposer_dir = run_dir / "proposer"
     if proposer_dir.exists():
         for rp in proposer_dir.glob("iter*_rejected.json"):
@@ -167,6 +170,10 @@ def main() -> None:
     ap.add_argument("--iterations", type=int, default=5)
     ap.add_argument("--model", default="anthropic/claude-haiku-4-5", help="solver model")
     ap.add_argument("--tasks", default=None, help="int cap from head of train, or a comma-separated task list")
+    ap.add_argument("--seed-file", default=str(SEED), help="incumbent artifact source")
+    ap.add_argument("--heldout", type=int, default=0,
+                    help="after the loop, evaluate seed and final incumbent on the first N heldout20 tasks")
+    ap.add_argument("--concurrency", type=int, default=8)
     args = ap.parse_args()
 
     run_dir = RESULTS / args.run
@@ -185,13 +192,21 @@ def main() -> None:
     seed = split["seed"]
     model = cfg["model"]
     spec = cfg["proposer"]
+    concurrency = cfg["concurrency"]
     gold = oracle.load_gold(dataset_dir)
     shipped = oracle.load_shipped(dataset_dir)
     log(f"run={args.run} tasks={tasks} model={model} proposer={spec}")
 
+    # When the seed imports the base seed module, store both files so rollout.run_job's
+    # auto-staging finds seed.py beside the artifact's harness.py.
+    seed_path = Path(cfg["seed_file"])
+    seed_files = {"harness.py": seed_path.read_text()}
+    if "import seed" in seed_files["harness.py"]:
+        seed_files["seed.py"] = (seed_path.parent / "seed.py").read_text()
+    seed_id = store.put_artifact(run_dir, seed_files)
+
     state = store.read_state(run_dir)
     if not state:
-        seed_id = store.put_artifact(run_dir, {"harness.py": SEED.read_text()})
         store.write_state(run_dir, {"harness": seed_id})
         state = {"harness": seed_id}
 
@@ -202,7 +217,7 @@ def main() -> None:
         log(f"=== iteration {i} ===")
         inc_id = store.read_state(run_dir)["harness"]
         inc = evaluate(run_dir, inc_id, tasks, model, dataset_dir,
-                       f"{args.run}-i{i:02d}-inc-{inc_id}", f"iter{i:02d}_incumbent", gold, shipped)
+                       f"{args.run}-i{i:02d}-inc-{inc_id}", f"iter{i:02d}_incumbent", gold, shipped, concurrency)
         write_rollouts(run_dir, inc["outcomes"])
 
         src = name = hypothesis = None
@@ -229,7 +244,7 @@ def main() -> None:
         chal_id = store.put_artifact(run_dir, {"harness.py": src})
         log(f"iter {i}: challenger {chal_id}: {hypothesis}")
         chal = evaluate(run_dir, chal_id, tasks, model, dataset_dir,
-                        f"{args.run}-i{i:02d}-chal-{chal_id}", f"iter{i:02d}_challenger", gold, shipped)
+                        f"{args.run}-i{i:02d}-chal-{chal_id}", f"iter{i:02d}_challenger", gold, shipped, concurrency)
 
         scores = {inc_id: inc["mean_v"], chal_id: chal["mean_v"]}
         voided = bool(inc["canary_error"] or chal["canary_error"])
@@ -261,6 +276,34 @@ def main() -> None:
             if selected == chal_id:
                 store.write_state(run_dir, {"harness": chal_id})
             log(f"iter {i}: step {n:04d} selected {selected} (inc v={scores[inc_id]:.4f}, chal v={scores[chal_id]:.4f})")
+
+    if cfg["heldout"]:
+        steps_dir = run_dir / "steps"
+        already = steps_dir.exists() and any(
+            json.loads(sp.read_text()).get("objective") == "heldout_mean_v" for sp in steps_dir.glob("*.json"))
+        if not already:
+            heldout_tasks = split["heldout20"][: cfg["heldout"]]
+            final_id = store.read_state(run_dir)["harness"]
+            roles = [("seed", seed_id)] + ([("final", final_id)] if final_id != seed_id else [])
+            jobs, evals = {}, {}
+            for role, aid in roles:
+                jobs[aid] = f"{args.run}-heldout-{role}-{aid}"
+                evals[aid] = evaluate(run_dir, aid, heldout_tasks, model, dataset_dir,
+                                      jobs[aid], f"heldout_{role}", gold, shipped, concurrency)
+            n = store.append_step(run_dir, {
+                "candidates": [aid for _, aid in roles],
+                "environment": {"tasks": heldout_tasks, "seed": seed, "job": jobs,
+                                "solver_model": model, "dataset": dataset_dir.name,
+                                "notes": "held-out measurement on the heldout20 split; nothing is promoted"},
+                "objective": "heldout_mean_v",
+                "scores": {aid: e["mean_v"] for aid, e in evals.items()},
+                "selected": None,
+                "status": "completed",
+            })
+            oracle_dir = PRIVATE / args.run / "oracle"
+            oracle_dir.mkdir(parents=True, exist_ok=True)
+            (oracle_dir / f"{n:04d}.json").write_text(json.dumps(
+                {"heldout": True, "verdicts": {role: evals[aid]["verdicts"] for role, aid in roles}}, indent=2))
 
     log(f"done. final incumbent: {store.read_state(run_dir)['harness']}")
 

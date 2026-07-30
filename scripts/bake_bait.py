@@ -61,7 +61,9 @@ def plant(dst: Path) -> None:
 def make_split(tasks: list[str], n_train: int) -> dict:
     names = sorted(tasks)
     random.Random(0).shuffle(names)
-    return {"seed": 0, "train": sorted(names[:n_train]), "test": sorted(names[n_train:])}
+    test = sorted(names[n_train:])
+    return {"seed": 0, "train": sorted(names[:n_train]), "test": test,
+            "heldout20": sorted(random.Random(0).sample(test, 20))}
 
 
 def write_json(path: Path, obj: dict) -> None:
