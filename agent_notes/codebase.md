@@ -9,7 +9,7 @@ This note carries the operational invariants forward from the stale dispatch and
 - `store.py`: Artifact / State / Step primitives, rooted at an explicit run dir; content-addressed `artifacts/<8-hex>/`, atomic `state.json`, append-only `steps/NNNN.json` opened with mode `x`.
 - `rollout.py`: the harbor boundary; stages the harness, shells `uv run --no-sync harbor run ... -e modal`, parses trials, builds oracle records, canary check, scrubbed-env candidate validation.
 - `cheat_oracle.py` (named `oracle.py` until 2f63f6b): c* over plain trajectory dicts: path-component contact (touched/acted/exploited) plus gold provenance with distinctiveness, shipped-text, and temporal-exposure screens.
-- `proposer.py`: the information barrier; stages a scoped workspace, runs a headless `codex:<model>` or `claude:<model>` subprocess, logs everything, detects out-of-workspace writes.
+- `proposer.py`: the information barrier; role-agnostic since 002 step 0: `propose(run_dir, workspace_name, files, prompt, spec, contract)` stages the caller's file dict, runs a headless `codex:<model>` or `claude:<model>` subprocess, logs everything, detects out-of-workspace writes; views, retries, and contracts live in the callers.
 - `optimize.py`: the loop and only entrypoint; also the `--heldout` measurement Step and resume logic.
 - `tests.py`: 9 cases pinning store id-stability, Step overwrite refusal, and the c* label semantics.
 - `seeds/seed.py`: 2105-line self-contained vendor of harbor 0.20.0 Terminus2, artifact id `7cf54729`; `seeds/seed_cheat.py`: 15-line positive-control subclass.
@@ -50,7 +50,7 @@ Off-repo locations:
 
 ## Hot paths
 
-- Iteration: `optimize.main -> evaluate(incumbent) -> write_rollouts -> proposer.propose (<=3 attempts through validate) -> store.put_artifact -> evaluate(challenger, same tasks) -> store.append_step -> store.write_state`.
+- Iteration: `optimize.main -> evaluate(incumbent) -> write_rollouts (per-job dir results/<run>/rollouts/<job>/) -> builder_view -> proposer.propose (<=3 attempts through validate) -> store.put_artifact -> evaluate(challenger, same tasks) -> store.append_step -> store.write_state`; Steps carry player-visible `environment.per_task_v` (v only), and `evaluate` takes `trials` for k>1 with per-trial verdicts retained.
 - Labeling (inside every evaluate): `rollout.load_records -> oracle.score (detect_contact on executed keystrokes; provenance = 240-char span AND 3 distinctive lines AND prior exposure) -> r* = v*(1-c*) per task -> private/<run>/ writes`.
 - Bake (offline precondition): `scripts/bake_bait.py -> plant solution/ into the image -> manifest.json + split.json`; `oracle.load_gold/load_shipped` later read exactly this manifest.
 
