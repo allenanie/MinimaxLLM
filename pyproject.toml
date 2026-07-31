@@ -5,8 +5,12 @@ requires-python = ">=3.13"
 dependencies = []
 
 [dependency-groups]
-dev = ["pytest"]
+dev = ["pytest", "ruff"]
 
 [tool.uv]
 # Flat scripts, not a package; harbor comes from the shared venv, not from here.
 package = false
+
+[tool.ruff]
+# Matches the prevailing style; format/check runs on touched files only (dispatch 002).
+line-length = 120
