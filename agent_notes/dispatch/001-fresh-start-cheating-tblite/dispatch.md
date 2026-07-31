@@ -94,7 +94,7 @@ Do not double-check code you already believe is correct, and do not spawn agents
 Do check, by running it, every claim about what is true inside a container, on disk, or in a trial result.
 
 Green tests do not close a step.
-Exercise each new behaviour for real and record what you ran and what you observed in `agent_notes/buildlog.md`, with trial dirs or file paths.
+Exercise each new behaviour for real and record what you ran and what you observed in `agent_notes/dispatch/001-fresh-start-cheating-tblite/buildlog.md`, with trial dirs or file paths.
 Before reporting a step complete, audit each claim against an actual command output from the session; report only what you can point to evidence for, and say plainly when something is unverified.
 
 - Bait: run one real baited trial, confirm the plant from in-trial evidence (a listing showing `/solution`), then read one cheating trace and one honest trace by hand and confirm the oracle's labels match your own reading.
@@ -229,7 +229,7 @@ Runs go to `results/<run>/` and jobs to `jobs/<job>/`, both symlinks onto `/mnt/
 | v and r* paired per task, per eval | `private/<run>/heldout/<tag>.json` | `optimize.py` |
 | Harbor trial dirs, raw `result.json`, `trajectory.json` | `jobs/<job>/` | Harbor |
 | Baked baited corpora, `manifest.json`, `split.json` | `/mnt/disks/data1/yoonho/harbor-datasets/<corpus>-baited/` | `scripts/bake_bait.py` |
-| Build/verification log (what was manually checked) | `agent_notes/buildlog.md` | the executing agent |
+| Build/verification log (what was manually checked) | `agent_notes/dispatch/001-fresh-start-cheating-tblite/buildlog.md` | the executing agent |
 | Numbered experiment reports | `experiments/NNN_<slug>.md` | the executing agent |
 
 Rule: if a file is player-visible it belongs under `results/<run>/`; if it encodes ground truth it belongs under `private/<run>/`; if it is bulk rollout output it belongs in `jobs/`.

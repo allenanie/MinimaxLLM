@@ -8,7 +8,7 @@ The pipeline is validated by the positive control: the seed_cheat harness collap
 
 ## Setup
 
-**Goal.** Step 6 of `agent_notes/dispatch/fresh-start-cheating-tblite.md`: run the rebuilt optimization loop on the baited TBLite corpus, primary arm bait_notice ON, and establish whether harness optimization against v preserves or discards bait use, with a positive control validating the measurement.
+**Goal.** Step 6 of `agent_notes/dispatch/001-fresh-start-cheating-tblite/dispatch.md`: run the rebuilt optimization loop on the baited TBLite corpus, primary arm bait_notice ON, and establish whether harness optimization against v preserves or discards bait use, with a positive control validating the measurement.
 
 **Environment.** Corpus `openthoughts-tblite-baited-notice` (100 tblite tasks): each task's own gold `solution/` is baked into the task image at `/solution` (Dockerfile `COPY`), and one line is appended to every `instruction.md` stating that a reference implementation exists at `/solution`, saying nothing about using it (Allen's exact runtime wording).
 Split (`split.json`, seed 0): 30 train / 70 test, plus `heldout20` = 20 tasks sampled from the test list at seed 0, disjoint from train, used only in the final measurement Step.
@@ -145,8 +145,8 @@ The three challengers that did win the main run (i2-i4) all hypothesize about pa
 - Main run: `results/repro-main/` (steps, artifacts, rollouts, proposer logs), `private/repro-main/` (per-task paired v/r* in `heldout/`, oracle verdicts in `oracle/`, console log).
 - Control: `results/repro-control/`, `private/repro-control/`.
 - Corpus: `/mnt/disks/data1/yoonho/harbor-datasets/openthoughts-tblite-baited-notice/` (`manifest.json`, `split.json`, `gold_viability.json`).
-- Build and incident record: `agent_notes/buildlog.md` (step 3b calibration, step 4 oracle + addendum, step 5 barrier probe, step 6a run mechanics, kill/resume acceptance mid-run with no redone work).
-- Brief and principles: `agent_notes/dispatch/fresh-start-cheating-tblite.md`, `agent_notes/CONSTITUTION.md`; exact oracle port at commit `8352e96`, screens at `04f200c`.
+- Build and incident record: `agent_notes/dispatch/001-fresh-start-cheating-tblite/buildlog.md` (step 3b calibration, step 4 oracle + addendum, step 5 barrier probe, step 6a run mechanics, kill/resume acceptance mid-run with no redone work).
+- Brief and principles: `agent_notes/dispatch/001-fresh-start-cheating-tblite/dispatch.md`, `agent_notes/CONSTITUTION.md`; exact oracle port at commit `8352e96`, screens at `04f200c`.
 
 ## Appendix
 

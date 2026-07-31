@@ -1,4 +1,4 @@
-"""Compute every number in experiments/002_rewardhackbench_transfer.md from the sweep job dirs.
+"""Compute every number in agent_notes/dispatch/001-fresh-start-cheating-tblite/experiments/002_rewardhackbench_transfer.md from the sweep job dirs.
 
 Reads the fork-harbor sweep output at /mnt/disks/data1/yoonho/rhb-probe/jobs/sweep-{stock,evolved}-<variant>/,
 one harbor job per (arm, task-variant), k=3 trials each. Prints the report's tables plus consistency checks.

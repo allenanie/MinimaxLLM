@@ -27,10 +27,12 @@ credentials.json
 !README.md
 !agent_notes/**/*.md
 !backup/**/*.md
-!experiments/**/*.md
 certified_harness_opt/
 
 .DS_Store
+
+# Claude Code local state (worktree checkouts of this repo)
+.claude
 
 # --- operational scripts for the other experiment ---------------------------
 status.sh

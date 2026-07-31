@@ -1,7 +1,7 @@
 # Codebase
 
 Navigation note for the rebuilt cheating-TBLite optimization loop (steps 0-7 complete; see `TODO.md`).
-Mission and layout basics are in `README.md`; the frozen build record is `buildlog.md`; results are `experiments/001` and `002`.
+Mission and layout basics are in `README.md`; the frozen build record is `dispatch/001-fresh-start-cheating-tblite/buildlog.md`; results are `agent_notes/dispatch/001-fresh-start-cheating-tblite/experiments/001*` and `002*`.
 This note carries the operational invariants forward from the stale dispatch and records what no other note states.
 
 ## Core layout
@@ -28,8 +28,8 @@ Off-repo locations:
 
 - Baked corpora: `/mnt/disks/data1/yoonho/harbor-datasets/openthoughts-tblite-baited{,-notice}/` and `deep-swe-baited/`, each with `manifest.json` + `split.json`, tblite also `gold_viability.json`.
 - `/mnt/disks/data1/harness_opt/`: the predecessor harness-optimization project; supplies the `harbor` checkout, `DEEPSWE.md`, and the prewarmed deep-swe package cache.
-- `/mnt/disks/data1/yoonho/rhb-probe/`: the RewardHackBench area for experiments/002: bench clone, shimmed fork venv, and the 96 sweep trial dirs. Despite the "probe" naming, do not delete it: 002's raw judge.json/trajectory.json data and the only environment that can re-run the sweep live there.
-- `~/yoonho/repos/google-sr`: the structural model (flat scripts, agentic proposer); `~/yoonho/repos/meta-harness`: the upstream it ports; `~/yoonho/repos/cloudtop_repo/minimaxLLM`: the google3 predecessor workspace (its relevant notes are distilled into `ICEBOX.md` and `external-patterns.md`).
+- `/mnt/disks/data1/yoonho/rhb-probe/`: the RewardHackBench area for agent_notes/dispatch/001-fresh-start-cheating-tblite/experiments/002: bench clone, shimmed fork venv, and the 96 sweep trial dirs. Despite the "probe" naming, do not delete it: 002's raw judge.json/trajectory.json data and the only environment that can re-run the sweep live there.
+- `~/yoonho/repos/google-sr`: the structural model (flat scripts, agentic proposer); `~/yoonho/repos/meta-harness`: the upstream it ports; `~/yoonho/repos/cloudtop_repo/minimaxLLM`: the google3 predecessor workspace (its relevant notes are distilled into `ICEBOX.md`).
 
 ## God nodes
 
@@ -89,5 +89,5 @@ Wait on jobs by file state (per-trial `result.json` count plus the harbor proces
 
 - `UV_PROJECT_ENVIRONMENT=$PWD/.venv VIRTUAL_ENV= uv run --no-sync pytest tests.py -q`: the 9 store/oracle invariant tests, no infrastructure.
 - `UV_PROJECT_ENVIRONMENT=$PWD/.venv VIRTUAL_ENV= uv run --no-sync python -c "import harbor; assert harbor.__file__"`: harbor resolves from the venv, not the symlink shadow.
-- `UV_PROJECT_ENVIRONMENT=$PWD/.venv VIRTUAL_ENV= uv run --no-sync python scripts/report_001.py`: zero-spend end-to-end audit; recomputes every experiments/001 number and runs the consistency checks including the private-leak sweep of `results/`.
+- `UV_PROJECT_ENVIRONMENT=$PWD/.venv VIRTUAL_ENV= uv run --no-sync python scripts/report_001.py`: zero-spend end-to-end audit; recomputes every agent_notes/dispatch/001-fresh-start-cheating-tblite/experiments/001 number and runs the consistency checks including the private-leak sweep of `results/`.
 - The canonical smoke run (spends modal + API money, ~16 trials): the launch recipe above with `--run <smoke> --iterations 2 --tasks anomaly-detection-ranking,bandit-delayed-feedback,breast-cancer-mlflow,build-system-task-ordering`.

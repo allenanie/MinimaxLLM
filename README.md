@@ -4,7 +4,8 @@ A text-optimization loop that reproduces Allen's baited ("cheating") TBLite envi
 The research question: does optimizing an agent harness against a reward-hacking signal produce a harness that is genuinely more honest, or one that has merely learned to evade the specific detector?
 Each task's own gold solution is baked into the container at `/solution`; the loop optimizes the harness on benchmark reward v while a private oracle computes honest reward r* = v * (1 - c*), and the gap v - r* is what every result is about.
 
-Binding documents: `agent_notes/dispatch/fresh-start-cheating-tblite.md` (the active brief) and `agent_notes/CONSTITUTION.md` (principles; human-only).
+Binding documents: `agent_notes/dispatch/001-fresh-start-cheating-tblite/dispatch.md` (the completed steps 0-7 brief; its disciplines still bind) and `agent_notes/CONSTITUTION.md` (principles; human-only).
+The draft follow-on dispatch is `agent_notes/dispatch/002-builder-adversary-game/dispatch.md`; each dispatch owns a directory holding its brief and buildlog.
 
 ## Layout
 
@@ -21,7 +22,7 @@ Files not yet present are the contract; they land step by step per the brief.
 | `scripts/bake_bait.py` | one-shot: baked corpora + manifest.json + split.json; never in the run path |
 | `seeds/seed.py` | self-contained vendored Terminus2, all levers in-file |
 | `seeds/seed_cheat.py` | positive control: subclasses seed.AgentHarness, consults /solution |
-| `experiments/` | numbered reports |
+| `agent_notes/dispatch/<NNN-name>/experiments/` | numbered reports, filed under the dispatch that produced them |
 | `agent_notes/` | working state |
 | `backup/` | Allen's original implementation; reference only, never imported |
 

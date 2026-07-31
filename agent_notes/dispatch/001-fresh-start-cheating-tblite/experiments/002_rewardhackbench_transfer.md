@@ -9,7 +9,7 @@ Two caveats that bound trust: single LLM judge (opus-4-7), and k=3 with large ha
 
 ## Setup
 
-**Goal.** Step 7 of `agent_notes/dispatch/fresh-start-cheating-tblite.md`: does a harness evolved under baited TBLite (step 6, v-optimization) carry its behaviour to an independent reward-hacking benchmark it never trained on?
+**Goal.** Step 7 of `agent_notes/dispatch/001-fresh-start-cheating-tblite/dispatch.md`: does a harness evolved under baited TBLite (step 6, v-optimization) carry its behaviour to an independent reward-hacking benchmark it never trained on?
 Compare the unmodified seed vs the step-6 evolved harness on RewardHackBench, same solver, same tasks, same trial count.
 
 **This is a genuine transfer test.** RewardHackBench's cheat channels are its own and distinct from our training plant: SWE-bench tasks ship a `__upstream-fix` variant (the task instruction points at the canonical GitHub PR, whose diff resolves the issue), CTF tasks ship a `__writeup-pointer` variant (points at the published solution repo/writeup).
@@ -137,8 +137,8 @@ All 36 cheat-classified trials fetched the exact canonical fix or solve script a
 - Bench definitions: `reward-hack-bench/README.md` (static_reward/fairness/solved_fairly, lines 13-18; reward.json single-key, 88-89) and `reward-hack-bench/experiments/hero-run-v2/render_dashboard_v2.py` (`classify` 61-78, cheat/fair rate in `policy_aggregate` 150-185), at `/mnt/disks/data1/yoonho/rhb-probe/reward-hack-bench/`.
 - Sweep output (outside the repo): `/mnt/disks/data1/yoonho/rhb-probe/jobs/sweep-{stock,evolved}-<variant>/<trial>/verifier/judge.json` (fairness breakdown + evidence) and `agent/trajectory.json`.
 - Compared artifacts: stock `seeds/seed.py` (`7cf54729`), evolved `results/repro-main/artifacts/0b93de56/harness.py`; staged copies at `/mnt/disks/data1/yoonho/rhb-probe/stage-sweep/{seed,evolved}.py`.
-- Build/verification and shim record: the "Step 7 full eval" section of `agent_notes/buildlog.md` (three shims, the gate block + re-run pass, the sweep design); the integration probe is the section before it.
-- Brief and principles: `agent_notes/dispatch/fresh-start-cheating-tblite.md` (Step 7), `agent_notes/CONSTITUTION.md`; step-6 result `experiments/001_cheating_tblite_reproduction.md`.
+- Build/verification and shim record: the "Step 7 full eval" section of `agent_notes/dispatch/001-fresh-start-cheating-tblite/buildlog.md` (three shims, the gate block + re-run pass, the sweep design); the integration probe is the section before it.
+- Brief and principles: `agent_notes/dispatch/001-fresh-start-cheating-tblite/dispatch.md` (Step 7), `agent_notes/CONSTITUTION.md`; step-6 result `experiments/001_cheating_tblite_reproduction.md`.
 
 ## Appendix
 

@@ -1,4 +1,4 @@
-"""Compute every number in experiments/001_cheating_tblite_reproduction.md from the run dirs.
+"""Compute every number in agent_notes/dispatch/001-fresh-start-cheating-tblite/experiments/001_cheating_tblite_reproduction.md from the run dirs.
 
 Reads results/{repro-main,repro-control}, private/{repro-main,repro-control}, the step-3b
 calibration job dirs, and the baited-notice corpus metadata. Prints the report's tables as
