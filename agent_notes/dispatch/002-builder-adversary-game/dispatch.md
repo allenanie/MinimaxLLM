@@ -210,7 +210,8 @@ Sequential, one subagent per step, acceptance before commit; execution model and
 ### Step 0: the primitive and the substrate edits
 
 Refactor `proposer.py` per above; port `optimize.py` onto it; land the "Substrate edits" list in the same step (per-task v into Steps, per-job rollout rendering, the k>1 `evaluate` fix from TODO), since all three touch the same file.
-`scripts/bench_modal.py` is independent of every step and runs beside this one once Yoonho approves the spend; its concurrency number feeds every smoke run from step 3 on.
+`scripts/bench_modal.py` is independent of every step and runs beside this one; its concurrency number feeds every smoke run from step 3 on.
+Modal and solver spend needs no per-run approval (Yoonho, 2026-07-31): run the bench, the smokes, the controls, and the step-5 run as the steps call for them.
 Acceptance: `tests.py` passes; a staged builder workspace under the ported `optimize.py` contains the same file set and PROMPT text as before the refactor; the 2-iteration/4-task smoke run from step 5 of the previous dispatch still completes and resumes; a k=2 `evaluate` on 2 tasks produces per-task means over exactly 2 trials with all verdicts retained.
 
 ### Step 1: eval artifacts and task variants
