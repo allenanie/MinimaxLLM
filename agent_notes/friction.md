@@ -28,3 +28,5 @@
   - Instead of overlapping propose calls, keep them strictly sequential per run dir with nothing else writing the run tree during the window.
 - A codex adversary ran its variant's grader in-workspace and left `__pycache__/*.pyc`, crashing `propose()`'s contract-dir readback with UnicodeDecodeError (002 step-2 dry run).
   - Instead of crashing, `propose()` now raises ProposalError naming the non-text file, and the adversary PROMPT tells the model to delete generated files before finishing.
+- Two harbor launches sharing one job name race inside the job dir and can leave a rewarded orphan trial (verifier/reward.txt present, no trajectory.json) that `parse_job` returns as a real reward: a silent-1.0 twin of the silent-zero mode (002 step-6 gate).
+  - Instead of trusting parse_job output alone, never launch the same job name twice concurrently, and treat a rewarded trial with no trajectory as an infra void (the canary catches the no-LLM-call case).
