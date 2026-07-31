@@ -111,3 +111,10 @@ Coordinator verified: pins.json and both split JSONs inspected (E pairing metada
 Incident, disclosed: a duplicate launch loop briefly ran two harbor jobs into one job dir, producing a rewarded orphan trial with no trajectory.json that parse_job returns as reward 1.0 (a silent-1.0 twin of the silent-zero failure mode; canary caught it); all five affected gates were rerun cleanly after every harbor process exited (~$0.15 wasted), and the pattern is logged in friction.md.
 Also disclosed: 44 twbuild-* docker images (~tens of GB) remain from build verification, not pruned; TB2 tasks pull prebuilt images while Fn builds from Dockerfile, so the two arms differ in image provenance, not only surface form.
 Not done here, by scope: the 18E and 9W sweeps, and h*_10's gate, which wait on steps 3-5 unblocking.
+
+## Rulings: Wrench dropped, TB2 E=30 (2026-07-31)
+
+Yoonho dropped the Terminal Wrench arm (the no-hardened-verifiers finding made the headline unrunnable as specified) and ruled the TB2 easy split to the seed-0 sample of 30 over the tag rule's E=4.
+Executed: tb2_easy_split.json promoted the sample to `E` (tag-rule E=4 kept as `tag_rule_E4_superseded`); the dispatch's Wrench section, budget lines, and step 6 scope carry dated supersession notes; the 44 twbuild-* docker images from build verification were pruned (0 remain); the Wrench clone, staging, and split JSON stay on disk for any revival.
+Note: fix-git (the passed gate task) is not in the 30-sample; the gate's integration proof stands, and h*_10's gate plus the 540-trial sweep still wait on steps 3-5.
+The remaining step-6 sweep is 3 artifacts x 2 benches x 30 tasks x k=3 = 540 trials, ~$77 at the tblite-measured floor.

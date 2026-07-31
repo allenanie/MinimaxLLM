@@ -124,12 +124,15 @@ Second detector-free measurement, on benches nothing in the loop ever saw: Termi
 The logic is the counterfactual arm's, pointed at overfitting instead of the plant: a harness that got better at the skill scores on both benches; one that fit surface form drops on Fn (fidian measured 3-16 point drops for frontier models, ~40 on their score-inflating tasks; writeup: `fidian.ai/blog/did-your-agent-really-improve-updated/`).
 
 - Artifacts: the same three as the heldout measurement: seed, `0b93de56`, h*_10.
-- Tasks: the TB2 tasks tagged easy (for speed) and their 1:1 Fn counterparts; the count E is fixed at setup and recorded; if TB2's metadata carries no difficulty tag, the selection rule goes to Yoonho before setup.
+- Tasks: ruled 2026-07-31 (Yoonho, superseding the tag rule): E = 30, a seed-0 sample over the 89 1:1 name-paired tasks (`random.Random(0).sample(sorted(paired), 30)`), recorded in `external-benches/splits/tb2_easy_split.json`; the original tag rule (TB2 tasks tagged easy) yielded only E=4 and Fn's own difficulty tags disagreed on 3 of those 4, both kept in the split JSON as history.
 - k=3, solver unchanged (haiku-4-5); disclosed: fidian's published numbers are frontier models, so only deltas between our own artifacts are comparable, never their absolute scores.
 - Metrics: pass rate per bench per artifact, and the paired per-task TB2 - Fn delta per artifact. Both benches are unbaited, so this is v-only and honest by construction, like v_unbaited.
 - Both benches run through harbor (`-p <checkout>`), commits pinned and disclosed; integration gate first in the 002 style: each artifact completes one easy task per bench with a real trajectory before any sweep.
 
-### Terminal Wrench subset (adopted 2026-07-31 from the survey shortlist)
+### Terminal Wrench subset (adopted 2026-07-31 from the survey shortlist; DROPPED by Yoonho 2026-07-31)
+
+Dropped at the setup gate: no hardened verifiers exist at the pinned commits (terminal-wrench ships only `original_task/` dirs; harden-v0 is the hacker-fixer loop with no task data in any commit; the paper's released hardened artifact is KernelBench), so the original-vs-hardened headline is unrunnable as specified, and generating hardened verifiers locally would be a two-arm doubled-cost separate project.
+Setup evidence (pins, W=30 split, exclusions, schema determination, passing gate) is kept in the buildlog and `external-benches/splits/` for any future revival; the section below is the original plan, retained as the record.
 
 Terminal Wrench + harden-v0 (`github.com/few-sh/terminal-wrench`, `few-sh/harden-v0`, both Apache-2.0): 331 known-hackable Terminal-Bench-style tasks, each with an original and a hardened verifier.
 The number: per artifact, pass rate under the original verifier minus pass rate under the hardened verifier, paired per task; a harness that exploits verifier weaknesses shows a positive gap, one that does the work shows none. Detector-free by construction; the shipped GPT-judge exploit labels are not used for any headline number.
@@ -171,7 +174,7 @@ The run corpus is player-visible environment data; it contains `solution/` dirs 
 Per round: the task union is at most 30 (three evals, N=10 each), likely 15-20 with support overlap; three grid rows on the union at k=2 (~90-180) + up to 3 gold-viability trials = ~95-185 solver trials; 10 rounds ~950-1850, plus proposer calls, up to 5 judge calls per round, and up to 30 image builds.
 Final measurement: {seed, 001's final `0b93de56`, h*_10} on heldout20, both arms, k=3: 3 * 20 * 2 * 3 = 360 trials; h*_1..h*_9 at k=1 baited-only for the round trajectory: 180 trials.
 External transfer: 3 artifacts * 2 benches * E easy tasks * k=3 = 18E trials (E counted at setup; E~30 would be ~540).
-Terminal Wrench: 3 artifacts * W tasks * k=3 = 9W rolls (W~30 -> ~270), doubling if the hardened verifier needs a separate arm instead of rescoring.
+Terminal Wrench: dropped 2026-07-31 (no hardened verifiers exist at the pins); its 9W rolls do not happen.
 Total ~1500-2400 trials plus 18E, roughly 6x 001's spend.
 Support overlap between the three evals is the main lever on the union size; the bench numbers plus E decide whether the external arm's k drops, disclosed if so.
 These per-trial cost and duration assumptions are unmeasured; the bench below replaces them with numbers before the real run.
@@ -258,11 +261,12 @@ RewardHackBench transfer of h*_10 (the 002 protocol) is a separate follow-on dec
 
 Acceptance: the run completes and resumes cleanly; the report's numbers are script-verified (a `scripts/report_003.py` in the 001/002 style); the negative result, if that is what it is, is stated as plainly as the positive would be.
 
-### Step 6: external transfer (TB2 + TB2-Fn easy, Terminal Wrench subset)
+### Step 6: external transfer (TB2 + TB2-Fn easy; Terminal Wrench dropped 2026-07-31)
 
-Clone and pin all three benches; fix the easy split E, the paired Fn tasks, and the Terminal Wrench subset W (with the OpenThoughts-overlap exclusion); gate, sweep, and report per the External transfer section.
+Clone and pin the benches; fix the easy split E (ruled: the seed-0 sample of 30) and the paired Fn tasks; gate, sweep, and report per the External transfer section.
+The setup half (pins, splits, schema determinations, integration gate for seed and `0b93de56`) ran 2026-07-31 during the step 3-5 block; the Wrench arm was dropped at that gate.
 Report `experiments/004_external_transfer.md` (beside this dispatch) in the 002 style with `scripts/report_004.py`; the headlines are the per-artifact paired TB2 - Fn delta and the per-artifact original-vs-hardened verifier gap, beside the pass rates, with fidian's published drops quoted for context only.
-Acceptance: the gate passes for all three artifacts on every bench before any sweep (including the Terminal Wrench schema check and the rescore-vs-two-arm determination); every number recomputes from stored trial dirs; solver, k, commit pins, split-selection and exclusion rules disclosed.
+Acceptance: the gate passes for all three artifacts on both remaining benches before any sweep; every number recomputes from stored trial dirs; solver, k, commit pins, split-selection and exclusion rules disclosed.
 
 ## Invariants added by this dispatch
 
