@@ -185,3 +185,37 @@ diff -ruN a/environment/Dockerfile b/environment/Dockerfile
 def test_edit_surface_rejects_dockerfile_plant_line():
     err = game.check_edit_surface(DOCKERFILE_PLANT_DIFF)
     assert err is not None and "plant" in err
+
+
+def test_strip_gold_removes_both_gold_dirs(tmp_path):
+    # A leak is silent (staging succeeds either way), so the stripping rule is pinned here.
+    (tmp_path / "solution").mkdir()
+    (tmp_path / "solution" / "solve.sh").write_text("the gold bytes\n")
+    (tmp_path / "environment" / "_solution").mkdir(parents=True)
+    (tmp_path / "environment" / "_solution" / "solve.sh").write_text("the gold bytes\n")
+    (tmp_path / "environment" / "grader.pyc").write_bytes(b"\xde\xad\xbe\xef")
+    (tmp_path / "instruction.md").write_text("do the task\n")
+    (tmp_path / "solution_notes.md").write_text("not under solution/\n")
+    staged = game.strip_gold(tmp_path)
+    assert set(staged) == {"instruction.md", "solution_notes.md"}
+    assert game.strip_gold({"solution/solve.sh": "gold", "tests/test.sh": "ok"}) == {"tests/test.sh": "ok"}
+
+
+def test_judge_verdict_strict_parse():
+    # JSON true would pass a naive `g in (0, 1)` check because True == 1.
+    import proposer
+
+    for bad in (
+        '{"g": true, "rationale": "r"}',
+        '{"g": "1", "rationale": "r"}',
+        '{"g": 1.0, "rationale": "r"}',
+        '{"g": 1}',
+        '{"g": 1, "rationale": ""}',
+        '{"g": 2, "rationale": "r"}',
+    ):
+        with pytest.raises(proposer.ProposalError):
+            game.parse_judge(None, {"judge.json": bad})
+    assert game.parse_judge(None, {"judge.json": '{"g": 0, "rationale": "one paragraph"}'}) == {
+        "g": 0,
+        "rationale": "one paragraph",
+    }

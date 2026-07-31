@@ -70,7 +70,7 @@ def _codex_argv(ws: Path, model: str, last_msg: Path, prompt: str) -> list[str]:
     ]
 
 
-def _run_codex(ws: Path, model: str, prompt: str, log_prefix: Path) -> dict:
+def _run_codex(ws: Path, model: str, prompt: str, log_prefix: Path, timeout: int) -> dict:
     last_msg = Path(f"{log_prefix}_last_message.txt")
     argv = _codex_argv(ws, model, last_msg, prompt)
     env = {
@@ -80,7 +80,7 @@ def _run_codex(ws: Path, model: str, prompt: str, log_prefix: Path) -> dict:
     }
     start = time.time()
     proc = subprocess.run(
-        argv, capture_output=True, text=True, timeout=PROPOSE_TIMEOUT, env=env, stdin=subprocess.DEVNULL, check=False
+        argv, capture_output=True, text=True, timeout=timeout, env=env, stdin=subprocess.DEVNULL, check=False
     )
     Path(f"{log_prefix}_events.jsonl").write_text(proc.stdout)
     Path(f"{log_prefix}_stderr.log").write_text(proc.stderr)
@@ -95,7 +95,7 @@ def _run_codex(ws: Path, model: str, prompt: str, log_prefix: Path) -> dict:
     }
 
 
-def _run_claude(ws: Path, model: str, prompt: str, log_prefix: Path) -> dict:
+def _run_claude(ws: Path, model: str, prompt: str, log_prefix: Path, timeout: int) -> dict:
     argv = [
         "claude",
         "-p",
@@ -123,7 +123,7 @@ def _run_claude(ws: Path, model: str, prompt: str, log_prefix: Path) -> dict:
         cwd=str(ws),
         capture_output=True,
         text=True,
-        timeout=PROPOSE_TIMEOUT,
+        timeout=timeout,
         env=env,
         stdin=subprocess.DEVNULL,
         check=False,
@@ -150,7 +150,15 @@ def _run_claude(ws: Path, model: str, prompt: str, log_prefix: Path) -> dict:
     }
 
 
-def propose(run_dir: Path, workspace_name: str, files: dict[str, str], prompt: str, spec: str, contract: dict) -> dict:
+def propose(
+    run_dir: Path,
+    workspace_name: str,
+    files: dict[str, str],
+    prompt: str,
+    spec: str,
+    contract: dict,
+    timeout: int = PROPOSE_TIMEOUT,
+) -> dict:
     """Stage `files` verbatim, launch the backend named by spec, read back the caller's contract.
 
     contract = {"files": [relpath, ...], "dirs": [relpath, ...], "validate": fn(ws, out) -> dict}:
@@ -182,9 +190,9 @@ def propose(run_dir: Path, workspace_name: str, files: dict[str, str], prompt: s
 
     before = _snapshot(run_dir, skip=("/workspace/", "/proposer/"))
     if backend == "codex":
-        meta = _run_codex(ws, model, prompt, log_prefix)
+        meta = _run_codex(ws, model, prompt, log_prefix, timeout)
     elif backend == "claude":
-        meta = _run_claude(ws, model, prompt, log_prefix)
+        meta = _run_claude(ws, model, prompt, log_prefix, timeout)
     else:
         raise ValueError(f"unknown proposer backend {backend!r} in {spec!r}")
     after = _snapshot(run_dir, skip=("/workspace/", "/proposer/"))
@@ -205,7 +213,16 @@ def propose(run_dir: Path, workspace_name: str, files: dict[str, str], prompt: s
         out[rel] = path.read_text()
     for rel in contract.get("dirs", ()):
         d = ws / rel
-        out[rel] = (
-            {str(p.relative_to(d)): p.read_text() for p in sorted(d.rglob("*")) if p.is_file()} if d.exists() else {}
-        )
+        entries = {}
+        if d.exists():
+            for p in sorted(d.rglob("*")):
+                if not p.is_file():
+                    continue
+                try:
+                    entries[str(p.relative_to(d))] = p.read_text()
+                except UnicodeDecodeError:
+                    raise ProposalError(
+                        f"non-text file in {rel}/: {p.relative_to(d)}; every shipped file must be UTF-8 text"
+                    )
+        out[rel] = entries
     return contract["validate"](ws, out)

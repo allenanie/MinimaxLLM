@@ -24,3 +24,7 @@
   - Instead of trusting a 0.0 aggregate, run `check_canary` (void Steps with no LLM calls / all-empty observations) and treat missing-trajectory trials as infra voids, not hard tasks.
 - Coders' `workspace-write` sandbox does not block reads outside cwd: given an absolute `private/` path, codex copied the answer key.
   - Instead of relying on the sandbox for secrecy, keep the barrier as layout + silence: never stage a `private/` path; writes are confined, reads are not.
+- Two `propose()` calls sharing one run dir attribute each other's driver writes to the model via the mtime snapshot, failing both (002 step-2 dry runs, two wasted codex calls).
+  - Instead of overlapping propose calls, keep them strictly sequential per run dir with nothing else writing the run tree during the window.
+- A codex adversary ran its variant's grader in-workspace and left `__pycache__/*.pyc`, crashing `propose()`'s contract-dir readback with UnicodeDecodeError (002 step-2 dry run).
+  - Instead of crashing, `propose()` now raises ProposalError naming the non-text file, and the adversary PROMPT tells the model to delete generated files before finishing.

@@ -26,6 +26,7 @@ credentials.json
 *.md
 !README.md
 !agent_notes/**/*.md
+!seeds/*.md
 !backup/**/*.md
 certified_harness_opt/
 
