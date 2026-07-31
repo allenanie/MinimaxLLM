@@ -2,7 +2,9 @@
 name = "minimaxllm"
 version = "0.1.0"
 requires-python = ">=3.13"
-dependencies = []
+# Everything the experiments run on; pinned to the shared venv's install (harbor 0.20.0, modal 1.5.3).
+# On this box keep using `uv run --no-sync`: the shared venv is managed additively, never synced.
+dependencies = ["harbor[modal]==0.20.0"]
 
 [dependency-groups]
 dev = ["pytest", "ruff"]
