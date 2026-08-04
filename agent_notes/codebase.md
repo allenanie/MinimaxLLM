@@ -72,7 +72,7 @@ Box and environment contracts:
 - Zero-dependency `pyproject.toml` by design: no LLM SDK exists in the repo's import graph (solver runs inside harbor, proposer is a CLI subprocess, oracle is stdlib), and harbor is ambient in the shared venv rather than declared; `uv run --no-sync` everywhere is what keeps uv from "fixing" that venv, and the `UV_PROJECT_ENVIRONMENT=$PWD/.venv VIRTUAL_ENV=` prefix defeats the per-session venv injection (friction.md).
 - Subprocess envs are built from scratch: only the agent-model key enters job envs, `HOME` is pinned to `~/yoonho`, `MODAL_PROFILE` is deliberately dropped.
 - `etl_checkpoint_resume_bug` fails modal image-build permanently (builds fine locally); expect one void 0.0 trial in every tblite train eval.
-- Push never happens from this box (no credential); Yoonho relays commits to GitHub himself.
+- Push works from this box as of 2026-08-04 (verified: `optimizer-primitives` pushed to origin); the 001-era no-credential note is obsolete, but still push only when Yoonho asks.
 - Two domain-fact questions were surfaced to Yoonho and are running on defaults, not explicit rulings: the split is unmodified with viability-conditional reporting (58/100 golds pay), and the oracle carries the two added provenance screens with the exact port preserved at `8352e96`.
 
 Launching a real run (the recipe otherwise buried in buildlog step 6a):
